@@ -1,8 +1,10 @@
 # shipp-marketplace
 Databricks AI Data Engineering Capstone — multi-sided marketplace with data pipelines, RAG, AI agents, and a Databricks App.
 -----------------------------------------------
+## SHIPP Data Architecture
 
-                    SHIPP DATA
+```text
+                  SHIPP DATA
              ┌────────────────────┐
 Donor ──────→│ Listings           │
 Requester ──→│ Requests           │
@@ -16,18 +18,18 @@ Inspector ──→│ Inspections        │
      ┌─────────────────┼─────────────────┐
      ↓                 ↓                 ↓
 Furniture          ItemFits       openrouteservice
-dataset           dimensions        API
+dataset           dimensions          API
      │                 │                 │
      └─────────────────┴─────────────────┘
                        ↓
                  Spark Pipeline
                        ↓
               Bronze → Silver → Gold
+```
 
+## Repository Structure
 
-
-
-
+```text
 shipp-marketplace/
 │
 ├── README.md
@@ -38,5 +40,4 @@ shipp-marketplace/
 ├── agent/
 ├── app/
 └── docs/
-
-
+```

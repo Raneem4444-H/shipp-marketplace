@@ -2,20 +2,13 @@
 Databricks AI Data Engineering Capstone — multi-sided marketplace with data pipelines, RAG, AI agents, and a Databricks App.
 -----------------------------------------------
 3
+![Landing Page Overview](./workFlow/LandPage.png)
 
-![LandPage Overview](workFlow/LandPage.png)
+![Login/signup Page](./workFlow/LoginSignupPAGE.png)
 
------------------------------------------------
+![Posting Page](./workFlow/postingitemPage.png)
 
-![Login/signup Page](workFlow/LoginSignupPAGE.png)
-
------------------------------------------------
-
-![Posting Page](workFlow/postingitemPage.png)
-
------------------------------------------------
-
-![Review Page](workFlow/Review_your_item_request.png)
+![Review Page](./workFlow/Review_your_item_request.png)
 
 -----------------------------------------------
 

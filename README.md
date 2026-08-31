@@ -1,17 +1,6 @@
 # shipp-marketplace
 Databricks AI Data Engineering Capstone — multi-sided marketplace with data pipelines, RAG, AI agents, and a Databricks App.
 -----------------------------------------------
-3
-![Landing Page Overview](./workFlow/LandPage.png)
-
-
-![Login/signup Page](./workFlow/LoginSignupPAGE.png)
-
-![Posting Page](./workFlow/postingitemPage.png)
-
-![Review Page](./workFlow/Review_your_item_request.png)
-
------------------------------------------------
 
 ## SHIPP Data Architecture
 
@@ -47,6 +36,26 @@ Lakebase → CDF → gold_marketplace_metrics
         ↓
 Databricks App shows “Saved”
 ```
+
+# Landing Page Overview
+
+![Landing Page Overview](./workFlow/LandPage.png)
+
+# Login/signup Page
+
+![Login/signup Page](./workFlow/LoginSignupPAGE.png)
+
+# Posting Page
+
+![Posting Page](./workFlow/postingitemPage.png)
+
+# Review Page
+
+![Review Page](./workFlow/Review_your_item_request.png)
+
+-----------------------------------------------
+
+
 
 ## Matching Logic
 

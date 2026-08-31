@@ -3,135 +3,109 @@ Databricks AI Data Engineering Capstone — multi-sided marketplace with data pi
 -----------------------------------------------
 3
 
+![LandPage Overview](workFlow/LandPage.png)
+
+-----------------------------------------------
+
+![Login/signup Page](workFlow/LoginSignupPAGE.png)
+
+-----------------------------------------------
+
+![Posting Page](workFlow/postingitemPage.png)
+
+-----------------------------------------------
+
+![Review Page](workFlow/Review_your_item_request.png)
+
+-----------------------------------------------
+
 ## SHIPP Data Architecture
 
 ```text
-                         SHIPP PLATFORM DATA
-                ┌─────────────────────────────┐
-                │          LAKEBASE           │
-                │                             │
-Donor ─────────→│ Listings                    │
-Requester ─────→│ Requests                    │
-Partner ───────→│ Partner Schedule            │
-Inspector ─────→│ Inspections                 │
-                └──────────────┬──────────────┘
-                               │
-                               ↓
-                    Candidate Match Generation
-                               │
-                               ↓
-                     Third-Party Data Sources
-                ┌──────────────┼──────────────┐
-                │              │              │
-                ↓              ↓              ↓
-          Furniture        ItemFits      openrouteservice
-           Dataset         Dimensions       / HeiGIT API
-                │              │              │
-                └──────────────┴───────┬──────┘
-                                       │
-                                       ↓
-                                   Raw Data
-                                       │
-                                       ↓
-                                SPARK PIPELINE
-                                       │
-                                       ↓
-                         ┌─────────────────────┐
-                         │       BRONZE        │
-                         │                     │
-                         │ Raw source records  │
-                         │ Raw API responses   │
-                         │ Ingestion metadata  │
-                         └──────────┬──────────┘
-                                    │
-                                    ↓
-                         ┌─────────────────────┐
-                         │       SILVER        │
-                         │                     │
-                         │ Clean listings      │
-                         │ Clean requests      │
-                         │ distance_km         │
-                         │ duration_min        │
-                         │ coordinates         │
-                         │ route_feasible      │
-                         └──────────┬──────────┘
-                                    │
-                                    ↓
-                         ┌─────────────────────┐
-                         │        GOLD         │
-                         │                     │
-                         │ match_candidates    │
-                         │ logistics_score     │
-                         │ ranked_matches      │
-                         └──────────┬──────────┘
-                                    │
-                                    ↓
-                                  AGENT
-                                    │
-                                    ↓
-                       Recommendation + Action
+Donor / Requester
+        ↓
+Databricks App
+        ↓
+Lakebase
+(listings, requests, saved_items, agent_activity)
+        ↓
+CDF + Auto Loader
+        ↓
+Bronze
+(raw changes, images, API responses)
+        ↓
+Silver
+(clean listings, requests, image-derived content, routes)
+        ↓
+Eligible Listing–Request pairs
+        ↓
+POST /v2/matrix/driving-car
+        ↓
+gold_candidate_matches + gold_listing_search_docs
+        ↓
+AI Search + AI Agent
+        ↓
+Recommendation
+        ↓
+User approves save_item()
+        ↓
+Lakebase → CDF → gold_marketplace_metrics
+        ↓
+Databricks App shows “Saved”
 ```
 
 ## Matching Logic
 
 ```text
-                         MATCH SCORE
+                    ELIGIBILITY CHECKS
 
-                    ┌─────────────────┐
-Listing ───────────→│ Item Fit        │
-                    │                 │
-Request ───────────→│ Date Fit        │
-                    │                 │
-ORS API ───────────→│ Distance        │
-                    │                 │
-Partner ───────────→│ Capacity        │
-                    │                 │
-Vehicle ───────────→│ Feasibility     │
-                    └────────┬────────┘
-                             │
-                             ↓
-                       Ranked Matches
-                             │
-                             ↓
-                           Agent
-                             │
-                             ↓
-                  "Best match is ..."
+Listing + Request
+        ↓
+Listing is AVAILABLE?
+Category compatible?
+Availability fits need_by date?
+        ↓
+Eligible Listing–Request pairs
+        ↓
+                    MATCH SCORE
+
+Category compatibility     × 30%
+Availability / date fit    × 25%
+Route distance + duration  × 30%
+Semantic relevance         × 15%
+        ↓
+gold_candidate_matches
+        ↓
+AI Agent
+        ↓
+"Best match is ..."
 ```
 
 ## Example Routing Enrichment Flow
 
 ```text
-                    LAKEBASE
-
-          Listings              Requests
-     ┌────────────────┐    ┌────────────────┐
-     │ origin         │    │ destination    │
-     │ availability   │    │ need_by        │
-     └───────┬────────┘    └────────┬───────┘
-             │                      │
-             └──────────┬───────────┘
-                        │
-                        ↓
-                Candidate Matches
-                        │
-                        ↓
-             openrouteservice API
-                        │
-                        ↓
-                    Raw JSON
-                        │
-                        ↓
-                 Spark Pipeline
-                        │
-                        ↓
-              Bronze → Silver → Gold
-                        │
-                        ↓
-                      Agent
-                        │
-                        ↓
-              "Best match is ..."
+Lakebase
+Listings + Requests
+        ↓
+CDF
+        ↓
+bronze_listing_changes + bronze_request_changes
+        ↓
+silver_listings + silver_requests
+        ↓
+Eligible Listing–Request pairs
+        ↓
+POST /v2/matrix/driving-car
+        ↓
+bronze_route_responses
+(raw API JSON)
+        ↓
+silver_routes
+(distance_km, duration_min)
+        ↓
+gold_candidate_matches
+        ↓
+AI Agent
 ```
 
 ## Repository Structure

@@ -43,7 +43,7 @@ Databricks App shows “Saved”
 
 # Login/signup Page
 
-![Login/signup Page](./workFlow/LoginSignupPAGE.png)
+![Login/signup Page](./workFlow/loginSignpage.png)
 
 # Posting Page
 

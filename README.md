@@ -116,10 +116,17 @@ AI Agent
 ```text
 shipp-marketplace/
 │
-├── README.md
-├── .gitignore
+├── lakebase/                         ← OPERATIONAL DATA
+│   ├── migrations/
+│   │   ├── 001_create_p0_schema.sql
+│   │   └── 002_enable_replica_identity.sql
+│   │
+│   ├── seeds/
+│   │   └── 001_demo_data.sql
+│   │
+│   └── README.md
 │
-├── data_pipeline/
+├── data_pipeline/                    ← SPARK, LATER
 │   ├── ingestion/
 │   ├── bronze/
 │   ├── silver/
@@ -129,5 +136,13 @@ shipp-marketplace/
 ├── rag/
 ├── agent/
 ├── app/
-└── docs/
+├── docs/
+├── README.md
+└── .gitignore
 ```
+
+lakebase/       = operational database
+data_pipeline/  = analytical/data engineering pipeline
+rag/            = retrieval pipeline
+agent/          = AI tools/actions
+app/            = presentation

@@ -25,7 +25,7 @@ COMMENT ON COLUMN roles.role_name IS 'Human-readable role name with business mea
 -- ============================================================================
 -- 2. USERS TABLE - Core user entity
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE IF NOT EXISTS bootcamp_shipp.users (
     user_id VARCHAR(50) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     current_city VARCHAR(100),
@@ -48,7 +48,7 @@ CREATE INDEX idx_users_active ON users(is_active);
 -- ============================================================================
 -- 3. USER_ROLES TABLE - User-to-Role mapping (junction table)
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS user_roles (
+CREATE TABLE IF NOT EXISTS bootcamp_shipp.user_roles (
     user_id VARCHAR(50) NOT NULL,
     role_id VARCHAR(50) NOT NULL,
     assigned_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -70,7 +70,7 @@ CREATE INDEX idx_user_roles_role ON user_roles(role_id);
 -- ============================================================================
 -- 4. LISTINGS TABLE - Donor item postings
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS listings (
+CREATE TABLE IF NOT EXISTS bootcamp_shipp.listings (
     listing_id VARCHAR(50) PRIMARY KEY,
     donor_id VARCHAR(50) NOT NULL,
     title VARCHAR(255) NOT NULL,
@@ -112,7 +112,7 @@ CREATE INDEX idx_listings_available ON listings(available_from, available_until)
 -- ============================================================================
 -- 5. LISTING_FILES TABLE - Images and documents for listings
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS listing_files (
+CREATE TABLE IF NOT EXISTS bootcamp_shipp.listing_files (
     listing_file_id VARCHAR(50) PRIMARY KEY,
     listing_id VARCHAR(50) NOT NULL,
     file_path VARCHAR(512) NOT NULL,
@@ -135,7 +135,7 @@ CREATE INDEX idx_listing_files_listing ON listing_files(listing_id);
 -- ============================================================================
 -- 6. REQUESTS TABLE - Requester needs/requests
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS requests (
+CREATE TABLE IF NOT EXISTS bootcamp_shipp.requests (
     request_id VARCHAR(50) PRIMARY KEY,
     requester_id VARCHAR(50) NOT NULL,
     request_text TEXT NOT NULL,
@@ -174,7 +174,7 @@ CREATE INDEX idx_requests_need_by_date ON requests(need_by_date);
 -- ============================================================================
 -- 7. SAVED_ITEMS TABLE - Matching/pairing between requests and listings
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS saved_items (
+CREATE TABLE IF NOT EXISTS bootcamp_shipp.saved_items (
     saved_item_id VARCHAR(50) PRIMARY KEY,
     user_id VARCHAR(50) NOT NULL,
     request_id VARCHAR(50),
@@ -210,7 +210,7 @@ CREATE INDEX idx_saved_items_match_score ON saved_items(match_score DESC);
 -- ============================================================================
 -- 8. AGENT_ACTIVITY TABLE - Audit trail for AI/agent actions
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS agent_activity (
+CREATE TABLE IF NOT EXISTS bootcamp_shipp.agent_activity (
     activity_id VARCHAR(50) PRIMARY KEY,
     user_id VARCHAR(50) NOT NULL,
     tool_name VARCHAR(100) NOT NULL,

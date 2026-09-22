@@ -25,29 +25,29 @@
 -- ----------------------------------------------------------------------------
 -- STEP 0 — confirm current column state before touching anything.
 -- ----------------------------------------------------------------------------
-SET search_path TO bootcamp_shipp;
+SET search_path TO shipp;
 SELECT column_name,
     data_type
 FROM information_schema.columns
-WHERE table_schema = 'bootcamp_shipp'
+WHERE table_schema = 'shipp'
     AND table_name = 'saved_items'
 ORDER BY ordinal_position;
 -- ----------------------------------------------------------------------------
 -- STEP 1 — the migration, as one atomic transaction.
 -- ----------------------------------------------------------------------------
 BEGIN;
-SET search_path TO bootcamp_shipp;
+SET search_path TO shipp;
 -- Preserve the existing values before dropping the columns — this is
 -- what makes the rollback below actually restorable, not just structural.
-CREATE TABLE IF NOT EXISTS bootcamp_shipp.saved_items_match_data_backup AS
+CREATE TABLE IF NOT EXISTS shipp.saved_items_match_data_backup AS
 SELECT saved_item_id,
     match_score,
     match_reason,
     now() AS backed_up_at
-FROM bootcamp_shipp.saved_items;
-COMMENT ON TABLE bootcamp_shipp.saved_items_match_data_backup IS 'Pre-migration snapshot of saved_items.match_score/match_reason before removal in Issue #9. Safe to drop once gold_candidate_matches is confirmed as the sole source of truth.';
-ALTER TABLE bootcamp_shipp.saved_items DROP COLUMN IF EXISTS match_score;
-ALTER TABLE bootcamp_shipp.saved_items DROP COLUMN IF EXISTS match_reason;
+FROM shipp.saved_items;
+COMMENT ON TABLE shipp.saved_items_match_data_backup IS 'Pre-migration snapshot of saved_items.match_score/match_reason before removal in Issue #9. Safe to drop once gold_candidate_matches is confirmed as the sole source of truth.';
+ALTER TABLE shipp.saved_items DROP COLUMN IF EXISTS match_score;
+ALTER TABLE shipp.saved_items DROP COLUMN IF EXISTS match_reason;
 COMMIT;
 -- To dry-run instead: replace COMMIT with ROLLBACK, inspect the backup
 -- table row count from Step 2, then re-run with COMMIT.
@@ -57,12 +57,12 @@ COMMIT;
 -- Confirms the columns are actually gone.
 SELECT column_name
 FROM information_schema.columns
-WHERE table_schema = 'bootcamp_shipp'
+WHERE table_schema = 'shipp'
     AND table_name = 'saved_items';
 -- Confirms the backup captured every row (should match saved_items' row
 -- count at migration time).
 SELECT COUNT(*)
-FROM bootcamp_shipp.saved_items_match_data_backup;
+FROM shipp.saved_items_match_data_backup;
 -- Confirms gold_candidate_matches actually carries the join keys needed
 -- to replace what was just removed — run this against your Gold layer,
 -- not Lakebase, to confirm the read-time join will work:
@@ -76,20 +76,20 @@ FROM bootcamp_shipp.saved_items_match_data_backup;
 -- always reading the live Gold value:
 -- ----------------------------------------------------------------------------
 -- BEGIN;
--- ALTER TABLE bootcamp_shipp.saved_items RENAME COLUMN match_score TO match_score_at_save;
--- ALTER TABLE bootcamp_shipp.saved_items RENAME COLUMN match_reason TO match_reason_at_save;
--- COMMENT ON COLUMN bootcamp_shipp.saved_items.match_score_at_save IS
+-- ALTER TABLE shipp.saved_items RENAME COLUMN match_score TO match_score_at_save;
+-- ALTER TABLE shipp.saved_items RENAME COLUMN match_reason TO match_reason_at_save;
+-- COMMENT ON COLUMN shipp.saved_items.match_score_at_save IS
 --     'Frozen snapshot at save() time — NOT live. Query gold_candidate_matches for current score. Issue #9, Option B.';
 -- COMMIT;
 -- ----------------------------------------------------------------------------
 -- ROLLBACK SCRIPT — restores columns AND the data, using the backup table
 -- ----------------------------------------------------------------------------
 -- BEGIN;
--- ALTER TABLE bootcamp_shipp.saved_items ADD COLUMN match_score FLOAT;
--- ALTER TABLE bootcamp_shipp.saved_items ADD COLUMN match_reason VARCHAR(255);
--- UPDATE bootcamp_shipp.saved_items si
+-- ALTER TABLE shipp.saved_items ADD COLUMN match_score FLOAT;
+-- ALTER TABLE shipp.saved_items ADD COLUMN match_reason VARCHAR(255);
+-- UPDATE shipp.saved_items si
 --   SET match_score = b.match_score, match_reason = b.match_reason
---   FROM bootcamp_shipp.saved_items_match_data_backup b
+--   FROM shipp.saved_items_match_data_backup b
 --   WHERE si.saved_item_id = b.saved_item_id;
 -- COMMIT;
 -- ----------------------------------------------------------------------------

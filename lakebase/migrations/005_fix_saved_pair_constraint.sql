@@ -20,22 +20,22 @@
 -- ----------------------------------------------------------------------------
 -- STEP 0 — verify the constraint name matches what this migration assumes.
 -- ----------------------------------------------------------------------------
-SET search_path TO bootcamp_shipp;
+SET search_path TO shipp;
 SELECT conname,
     pg_get_constraintdef(oid)
 FROM pg_constraint
-WHERE conrelid = 'bootcamp_shipp.saved_items'::regclass
+WHERE conrelid = 'shipp.saved_items'::regclass
     AND contype = 'c';
 -- ----------------------------------------------------------------------------
 -- STEP 1 — the migration, as one atomic transaction with a guard clause.
 -- ----------------------------------------------------------------------------
 BEGIN;
-SET search_path TO bootcamp_shipp;
+SET search_path TO shipp;
 DO $$
 DECLARE violation_count INT;
 BEGIN
 SELECT COUNT(*) INTO violation_count
-FROM bootcamp_shipp.saved_items
+FROM shipp.saved_items
 WHERE request_id IS NULL
     OR listing_id IS NULL;
 IF violation_count > 0 THEN RAISE EXCEPTION 'Migration 005 aborted: % row(s) in saved_items have a NULL request_id or listing_id. Resolve these before tightening chk_saved_pair — see the resolution query below this block.',
@@ -43,8 +43,8 @@ violation_count;
 END IF;
 END $$;
 -- Only reached if the guard above didn't raise — no violating rows exist.
-ALTER TABLE bootcamp_shipp.saved_items DROP CONSTRAINT IF EXISTS chk_saved_pair;
-ALTER TABLE bootcamp_shipp.saved_items
+ALTER TABLE shipp.saved_items DROP CONSTRAINT IF EXISTS chk_saved_pair;
+ALTER TABLE shipp.saved_items
 ADD CONSTRAINT chk_saved_pair CHECK (
         request_id IS NOT NULL
         AND listing_id IS NOT NULL
@@ -56,29 +56,29 @@ COMMIT;
 -- IF THE GUARD ABORTED — run this to see exactly which rows are violating,
 -- then decide: backfill a request_id, or delete the row if truly invalid.
 -- ----------------------------------------------------------------------------
--- SELECT * FROM bootcamp_shipp.saved_items WHERE request_id IS NULL OR listing_id IS NULL;
+-- SELECT * FROM shipp.saved_items WHERE request_id IS NULL OR listing_id IS NULL;
 --
 -- To delete confirmed-invalid rows (only after team sign-off, not blindly):
--- DELETE FROM bootcamp_shipp.saved_items WHERE request_id IS NULL OR listing_id IS NULL;
+-- DELETE FROM shipp.saved_items WHERE request_id IS NULL OR listing_id IS NULL;
 -- ----------------------------------------------------------------------------
 -- STEP 2 — verification (safe to run standalone, read-only)
 -- ----------------------------------------------------------------------------
 -- Should return 0 rows.
 SELECT *
-FROM bootcamp_shipp.saved_items
+FROM shipp.saved_items
 WHERE request_id IS NULL
     OR listing_id IS NULL;
 -- Confirms the tightened constraint rejects bad inserts (should FAIL —
 -- that failure is the pass condition):
--- INSERT INTO bootcamp_shipp.saved_items (saved_item_id, user_id, listing_id, saved_at)
---   VALUES ('test-pair-check', (SELECT user_id FROM bootcamp_shipp.users LIMIT 1),
---           (SELECT listing_id FROM bootcamp_shipp.listings LIMIT 1), now());
+-- INSERT INTO shipp.saved_items (saved_item_id, user_id, listing_id, saved_at)
+--   VALUES ('test-pair-check', (SELECT user_id FROM shipp.users LIMIT 1),
+--           (SELECT listing_id FROM shipp.listings LIMIT 1), now());
 -- ----------------------------------------------------------------------------
 -- ROLLBACK SCRIPT
 -- ----------------------------------------------------------------------------
 -- BEGIN;
--- ALTER TABLE bootcamp_shipp.saved_items DROP CONSTRAINT IF EXISTS chk_saved_pair;
--- ALTER TABLE bootcamp_shipp.saved_items ADD CONSTRAINT chk_saved_pair
+-- ALTER TABLE shipp.saved_items DROP CONSTRAINT IF EXISTS chk_saved_pair;
+-- ALTER TABLE shipp.saved_items ADD CONSTRAINT chk_saved_pair
 --     CHECK (request_id IS NOT NULL OR listing_id IS NOT NULL);
 -- COMMIT;
 -- ----------------------------------------------------------------------------

@@ -17,7 +17,7 @@
 --     admin must first enable the Lakebase CDF preview from the workspace
 --     Previews page. Then, from the Lakebase project's production branch,
 --     open Branch Overview -> Lakebase CDF tab -> Start, choose
---     'bootcamp_shipp' as the source schema (every table in the schema is
+--     'shipp' as the source schema (every table in the schema is
 --     included automatically — no per-table picker), and choose the
 --     destination Unity Catalog catalog/schema for the resulting
 --     lb_<table_name>_history Delta tables.
@@ -33,7 +33,7 @@
 -- STEP 0 — confirm current REPLICA IDENTITY setting before changing anything.
 -- 'd' = default (primary key only), 'f' = full, 'n' = nothing, 'i' = index.
 -- ----------------------------------------------------------------------------
-SET search_path TO bootcamp_shipp;
+SET search_path TO shipp;
 
 SELECT relname AS table_name,
        CASE relreplident
@@ -43,7 +43,7 @@ SELECT relname AS table_name,
            WHEN 'i' THEN 'index'
        END AS replica_identity
 FROM pg_class
-WHERE relnamespace = 'bootcamp_shipp'::regnamespace AND relkind = 'r'
+WHERE relnamespace = 'shipp'::regnamespace AND relkind = 'r'
 ORDER BY relname;
 
 
@@ -54,16 +54,16 @@ ORDER BY relname;
 -- ----------------------------------------------------------------------------
 BEGIN;
 
-SET search_path TO bootcamp_shipp;
+SET search_path TO shipp;
 
-ALTER TABLE bootcamp_shipp.roles           REPLICA IDENTITY FULL;
-ALTER TABLE bootcamp_shipp.users           REPLICA IDENTITY FULL;
-ALTER TABLE bootcamp_shipp.user_roles      REPLICA IDENTITY FULL;
-ALTER TABLE bootcamp_shipp.listings        REPLICA IDENTITY FULL;
-ALTER TABLE bootcamp_shipp.listing_files   REPLICA IDENTITY FULL;
-ALTER TABLE bootcamp_shipp.requests        REPLICA IDENTITY FULL;
-ALTER TABLE bootcamp_shipp.saved_items     REPLICA IDENTITY FULL;
-ALTER TABLE bootcamp_shipp.agent_activity  REPLICA IDENTITY FULL;
+ALTER TABLE shipp.roles           REPLICA IDENTITY FULL;
+ALTER TABLE shipp.users           REPLICA IDENTITY FULL;
+ALTER TABLE shipp.user_roles      REPLICA IDENTITY FULL;
+ALTER TABLE shipp.listings        REPLICA IDENTITY FULL;
+ALTER TABLE shipp.listing_files   REPLICA IDENTITY FULL;
+ALTER TABLE shipp.requests        REPLICA IDENTITY FULL;
+ALTER TABLE shipp.saved_items     REPLICA IDENTITY FULL;
+ALTER TABLE shipp.agent_activity  REPLICA IDENTITY FULL;
 
 COMMIT;
 
@@ -75,7 +75,7 @@ COMMIT;
 SELECT relname AS table_name,
        CASE relreplident WHEN 'f' THEN 'full' ELSE 'NOT full — check this table' END AS replica_identity
 FROM pg_class
-WHERE relnamespace = 'bootcamp_shipp'::regnamespace AND relkind = 'r'
+WHERE relnamespace = 'shipp'::regnamespace AND relkind = 'r'
 ORDER BY relname;
 
 
@@ -89,7 +89,7 @@ ORDER BY relname;
 --    ingestion approach replaces CDF (e.g. polling + Auto Loader on an
 --    export, or a scheduled full/incremental extract job)?
 -- 2. Once confirmed available: start the feed via Branch Overview ->
---    Lakebase CDF tab -> Start, source schema 'bootcamp_shipp', choosing
+--    Lakebase CDF tab -> Start, source schema 'shipp', choosing
 --    the destination Bronze catalog/schema.
 -- 3. Confirm the resulting lb_<table>_history Delta tables actually appear
 --    and populate on a test write (insert/update a row in Lakebase, check

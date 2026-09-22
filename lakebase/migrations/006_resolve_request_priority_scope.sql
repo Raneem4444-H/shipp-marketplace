@@ -32,26 +32,26 @@
 -- ----------------------------------------------------------------------------
 -- STEP 0 — confirm current column/constraint state before touching anything.
 -- ----------------------------------------------------------------------------
-SET search_path TO bootcamp_shipp;
+SET search_path TO shipp;
 SELECT conname,
     pg_get_constraintdef(oid)
 FROM pg_constraint
-WHERE conrelid = 'bootcamp_shipp.requests'::regclass
+WHERE conrelid = 'shipp.requests'::regclass
     AND contype = 'c';
 -- ----------------------------------------------------------------------------
 -- STEP 1 — the migration, as one atomic transaction.
 -- ----------------------------------------------------------------------------
 BEGIN;
-SET search_path TO bootcamp_shipp;
+SET search_path TO shipp;
 -- Preserve existing values before dropping — restorable via rollback below.
-CREATE TABLE IF NOT EXISTS bootcamp_shipp.requests_priority_backup AS
+CREATE TABLE IF NOT EXISTS shipp.requests_priority_backup AS
 SELECT request_id,
     priority,
     now() AS backed_up_at
-FROM bootcamp_shipp.requests;
-COMMENT ON TABLE bootcamp_shipp.requests_priority_backup IS 'Pre-migration snapshot of requests.priority before removal in Issue #8. Safe to drop once confirmed unneeded.';
-ALTER TABLE bootcamp_shipp.requests DROP CONSTRAINT IF EXISTS chk_priority;
-ALTER TABLE bootcamp_shipp.requests DROP COLUMN IF EXISTS priority;
+FROM shipp.requests;
+COMMENT ON TABLE shipp.requests_priority_backup IS 'Pre-migration snapshot of requests.priority before removal in Issue #8. Safe to drop once confirmed unneeded.';
+ALTER TABLE shipp.requests DROP CONSTRAINT IF EXISTS chk_priority;
+ALTER TABLE shipp.requests DROP COLUMN IF EXISTS priority;
 COMMIT;
 -- To dry-run instead: replace COMMIT with ROLLBACK, inspect the backup
 -- table from Step 2, then re-run with COMMIT.
@@ -60,11 +60,11 @@ COMMIT;
 -- ----------------------------------------------------------------------------
 SELECT column_name
 FROM information_schema.columns
-WHERE table_schema = 'bootcamp_shipp'
+WHERE table_schema = 'shipp'
     AND table_name = 'requests';
 -- priority should no longer appear.
 SELECT COUNT(*)
-FROM bootcamp_shipp.requests_priority_backup;
+FROM shipp.requests_priority_backup;
 -- Should match requests' row count at migration time.
 -- ----------------------------------------------------------------------------
 -- ALTERNATIVE (Option A) — only use instead of Step 1 above if the team
@@ -72,18 +72,18 @@ FROM bootcamp_shipp.requests_priority_backup;
 -- scoring formula to name it as a weighted input. Do not run this
 -- without also updating the spec in the same PR.
 -- ----------------------------------------------------------------------------
--- COMMENT ON COLUMN bootcamp_shipp.requests.priority IS
+-- COMMENT ON COLUMN shipp.requests.priority IS
 --     'Weighting input for match scoring per BN-03/BN-06 — see spec §5.3 update. Issue #8, Option A.';
 -- ----------------------------------------------------------------------------
 -- ROLLBACK SCRIPT — restores the column AND the data, using the backup table
 -- ----------------------------------------------------------------------------
 -- BEGIN;
--- ALTER TABLE bootcamp_shipp.requests ADD COLUMN priority VARCHAR(50) DEFAULT 'MEDIUM';
--- ALTER TABLE bootcamp_shipp.requests ADD CONSTRAINT chk_priority
+-- ALTER TABLE shipp.requests ADD COLUMN priority VARCHAR(50) DEFAULT 'MEDIUM';
+-- ALTER TABLE shipp.requests ADD CONSTRAINT chk_priority
 --     CHECK (priority IN ('LOW', 'MEDIUM', 'HIGH', 'URGENT'));
--- UPDATE bootcamp_shipp.requests r
+-- UPDATE shipp.requests r
 --   SET priority = b.priority
---   FROM bootcamp_shipp.requests_priority_backup b
+--   FROM shipp.requests_priority_backup b
 --   WHERE r.request_id = b.request_id;
 -- COMMIT;
 -- ----------------------------------------------------------------------------

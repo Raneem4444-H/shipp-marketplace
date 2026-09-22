@@ -24,18 +24,18 @@
 -- ----------------------------------------------------------------------------
 -- STEP 0 — verify the constraint name matches what this migration assumes.
 -- ----------------------------------------------------------------------------
-SET search_path TO bootcamp_shipp;
+SET search_path TO shipp;
 SELECT conname,
     pg_get_constraintdef(oid)
 FROM pg_constraint
-WHERE conrelid = 'bootcamp_shipp.requests'::regclass
+WHERE conrelid = 'shipp.requests'::regclass
     AND contype = 'c';
 -- ----------------------------------------------------------------------------
 -- STEP 1 — the migration, as one atomic transaction.
 -- ----------------------------------------------------------------------------
 BEGIN;
-SET search_path TO bootcamp_shipp;
-UPDATE bootcamp_shipp.requests
+SET search_path TO shipp;
+UPDATE shipp.requests
 SET status = CASE
         status
         WHEN 'OPEN' THEN 'OPEN'
@@ -52,8 +52,8 @@ WHERE status IN (
         'FULFILLED',
         'CANCELLED'
     );
-ALTER TABLE bootcamp_shipp.requests DROP CONSTRAINT IF EXISTS chk_request_status;
-ALTER TABLE bootcamp_shipp.requests
+ALTER TABLE shipp.requests DROP CONSTRAINT IF EXISTS chk_request_status;
+ALTER TABLE shipp.requests
 ADD CONSTRAINT chk_request_status CHECK (
         status IN (
             'OPEN',
@@ -64,7 +64,7 @@ ADD CONSTRAINT chk_request_status CHECK (
     );
 -- If the team decides CANCELLED needs to stay distinct, add it here:
 -- CHECK (status IN ('OPEN','MATCHES_AVAILABLE','ITEM_SAVED','CLOSED','CANCELLED'));
-COMMENT ON COLUMN bootcamp_shipp.requests.status IS 'Request lifecycle status: OPEN, MATCHES_AVAILABLE, ITEM_SAVED, CLOSED. Aligned with spec §7.2 via Issue #12.';
+COMMENT ON COLUMN shipp.requests.status IS 'Request lifecycle status: OPEN, MATCHES_AVAILABLE, ITEM_SAVED, CLOSED. Aligned with spec §7.2 via Issue #12.';
 COMMIT;
 -- To dry-run instead: replace COMMIT with ROLLBACK, inspect the
 -- verification queries below, then re-run with COMMIT.
@@ -73,7 +73,7 @@ COMMIT;
 -- ----------------------------------------------------------------------------
 -- Should return 0 rows.
 SELECT *
-FROM bootcamp_shipp.requests
+FROM shipp.requests
 WHERE status NOT IN (
         'OPEN',
         'MATCHES_AVAILABLE',
@@ -83,26 +83,26 @@ WHERE status NOT IN (
 -- Distribution check — useful for your capstone demo narrative.
 SELECT status,
     COUNT(*)
-FROM bootcamp_shipp.requests
+FROM shipp.requests
 GROUP BY status
 ORDER BY status;
 -- Confirms the constraint rejects old values (should FAIL — that's the pass):
--- INSERT INTO bootcamp_shipp.requests
+-- INSERT INTO shipp.requests
 --   (request_id, requester_id, request_text, status)
---   VALUES ('test-status-check', (SELECT user_id FROM bootcamp_shipp.users LIMIT 1), 'Test', 'PENDING');
+--   VALUES ('test-status-check', (SELECT user_id FROM shipp.users LIMIT 1), 'Test', 'PENDING');
 -- ----------------------------------------------------------------------------
 -- ROLLBACK SCRIPT
 -- ----------------------------------------------------------------------------
 -- BEGIN;
--- UPDATE bootcamp_shipp.requests SET status = CASE status
+-- UPDATE shipp.requests SET status = CASE status
 --     WHEN 'OPEN'              THEN 'OPEN'
 --     WHEN 'MATCHES_AVAILABLE' THEN 'MATCHED'
 --     WHEN 'ITEM_SAVED'        THEN 'FULFILLED'
 --     WHEN 'CLOSED'            THEN 'CANCELLED'
 --     ELSE status
 -- END;
--- ALTER TABLE bootcamp_shipp.requests DROP CONSTRAINT IF EXISTS chk_request_status;
--- ALTER TABLE bootcamp_shipp.requests ADD CONSTRAINT chk_request_status
+-- ALTER TABLE shipp.requests DROP CONSTRAINT IF EXISTS chk_request_status;
+-- ALTER TABLE shipp.requests ADD CONSTRAINT chk_request_status
 --     CHECK (status IN ('OPEN', 'PENDING', 'MATCHED', 'FULFILLED', 'CANCELLED'));
 -- COMMIT;
 -- ----------------------------------------------------------------------------

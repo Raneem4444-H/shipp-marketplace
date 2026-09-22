@@ -25,6 +25,7 @@ COMMENT ON COLUMN bootcamp_shipp.roles.role_name IS 'Human-readable role name wi
 -- ============================================================================
 -- 2. USERS TABLE - Core user entity
 -- ============================================================================
+-- test File It will be delete soon 
 CREATE TABLE IF NOT EXISTS bootcamp_shipp.users (
     user_id VARCHAR(50) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,

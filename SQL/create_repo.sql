@@ -7,6 +7,7 @@
 -- ============================================================================
 -- 1. ROLES TABLE - User role definitions
 -- ============================================================================
+-- test File It will be delete soon 
 CREATE SCHEMA IF NOT EXISTS bootcamp_shipp;
 CREATE TABLE IF NOT EXISTS bootcamp_shipp.roles (
     role_id VARCHAR(50) PRIMARY KEY,

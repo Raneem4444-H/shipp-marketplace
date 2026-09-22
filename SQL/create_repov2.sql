@@ -25,7 +25,7 @@ COMMENT ON COLUMN shipp.roles.role_name IS 'Human-readable role name with busine
 -- ============================================================================
 -- 2. USERS TABLE - Core user entity
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS shipp.users (
+CREATE TABLE IF NOT EXISTS bootcamp_shipp.users (
     user_id VARCHAR(50) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     current_city VARCHAR(100),

@@ -23,21 +23,21 @@
 -- STEP 0 — verify the constraint name matches what this migration assumes.
 -- Run standalone first; compare output to chk_listing_status below.
 -- ----------------------------------------------------------------------------
-SET search_path TO bootcamp_shipp;
+SET search_path TO shipp;
 SELECT conname,
     pg_get_constraintdef(oid)
 FROM pg_constraint
-WHERE conrelid = 'bootcamp_shipp.listings'::regclass
+WHERE conrelid = 'shipp.listings'::regclass
     AND contype = 'c';
 -- ----------------------------------------------------------------------------
 -- STEP 1 — the migration itself, as one atomic transaction.
 -- If anything fails, the whole thing rolls back.
 -- ----------------------------------------------------------------------------
 BEGIN;
-SET search_path TO bootcamp_shipp;
+SET search_path TO shipp;
 -- Migrate existing data BEFORE tightening the constraint — the ALTER
 -- below will fail if any row still holds an old-vocabulary value.
-UPDATE bootcamp_shipp.listings
+UPDATE shipp.listings
 SET status = CASE
         status
         WHEN 'ACTIVE' THEN 'AVAILABLE'
@@ -49,8 +49,8 @@ SET status = CASE
     END
 WHERE status IN ('ACTIVE', 'MATCHED', 'RESERVED', 'ARCHIVED');
 -- Replace the constraint with the spec-aligned vocabulary.
-ALTER TABLE bootcamp_shipp.listings DROP CONSTRAINT IF EXISTS chk_listing_status;
-ALTER TABLE bootcamp_shipp.listings
+ALTER TABLE shipp.listings DROP CONSTRAINT IF EXISTS chk_listing_status;
+ALTER TABLE shipp.listings
 ADD CONSTRAINT chk_listing_status CHECK (
         status IN (
             'DRAFT',
@@ -62,11 +62,11 @@ ADD CONSTRAINT chk_listing_status CHECK (
     );
 -- Update the default so newly-inserted listings start in a valid,
 -- spec-aligned state instead of the old default of 'ACTIVE'.
-ALTER TABLE bootcamp_shipp.listings
+ALTER TABLE shipp.listings
 ALTER COLUMN status
 SET DEFAULT 'DRAFT';
 -- Update the column comment to reflect the new canonical vocabulary.
-COMMENT ON COLUMN bootcamp_shipp.listings.status IS 'Listing lifecycle status: DRAFT, AVAILABLE, UNAVAILABLE, WITHDRAWN, EXPIRED. Aligned with spec §7.1 via Issue #6.';
+COMMENT ON COLUMN shipp.listings.status IS 'Listing lifecycle status: DRAFT, AVAILABLE, UNAVAILABLE, WITHDRAWN, EXPIRED. Aligned with spec §7.1 via Issue #6.';
 COMMIT;
 -- To dry-run instead: replace COMMIT with ROLLBACK, inspect row counts
 -- from the verification queries below, then re-run with COMMIT.
@@ -75,7 +75,7 @@ COMMIT;
 -- ----------------------------------------------------------------------------
 -- Should return 0 rows — confirms no listing is left with an old value.
 SELECT *
-FROM bootcamp_shipp.listings
+FROM shipp.listings
 WHERE status NOT IN (
         'DRAFT',
         'AVAILABLE',
@@ -85,14 +85,14 @@ WHERE status NOT IN (
     );
 -- Confirms the constraint now rejects old values (this INSERT should FAIL —
 -- that failure is the pass condition; uncomment to test):
--- INSERT INTO bootcamp_shipp.listings
+-- INSERT INTO shipp.listings
 --   (listing_id, donor_id, title, status)
---   VALUES ('test-status-check', (SELECT user_id FROM bootcamp_shipp.users LIMIT 1), 'Test', 'ACTIVE');
+--   VALUES ('test-status-check', (SELECT user_id FROM shipp.users LIMIT 1), 'Test', 'ACTIVE');
 -- Sanity check on the distribution after migration (useful for your
 -- capstone demo — shows the data actually moved, not just the constraint):
 SELECT status,
     COUNT(*)
-FROM bootcamp_shipp.listings
+FROM shipp.listings
 GROUP BY status
 ORDER BY status;
 -- ----------------------------------------------------------------------------
@@ -100,7 +100,7 @@ ORDER BY status;
 -- (e.g. team decides on a different mapping after this already ran)
 -- ----------------------------------------------------------------------------
 -- BEGIN;
--- UPDATE bootcamp_shipp.listings SET status = CASE status
+-- UPDATE shipp.listings SET status = CASE status
 --     WHEN 'DRAFT'       THEN 'ACTIVE'
 --     WHEN 'AVAILABLE'   THEN 'ACTIVE'
 --     WHEN 'UNAVAILABLE' THEN 'RESERVED'
@@ -108,10 +108,10 @@ ORDER BY status;
 --     WHEN 'EXPIRED'     THEN 'EXPIRED'
 --     ELSE status
 -- END;
--- ALTER TABLE bootcamp_shipp.listings DROP CONSTRAINT IF EXISTS chk_listing_status;
--- ALTER TABLE bootcamp_shipp.listings ADD CONSTRAINT chk_listing_status
+-- ALTER TABLE shipp.listings DROP CONSTRAINT IF EXISTS chk_listing_status;
+-- ALTER TABLE shipp.listings ADD CONSTRAINT chk_listing_status
 --     CHECK (status IN ('ACTIVE', 'MATCHED', 'RESERVED', 'ARCHIVED', 'EXPIRED'));
--- ALTER TABLE bootcamp_shipp.listings ALTER COLUMN status SET DEFAULT 'ACTIVE';
+-- ALTER TABLE shipp.listings ALTER COLUMN status SET DEFAULT 'ACTIVE';
 -- COMMIT;
 -- ----------------------------------------------------------------------------
 -- STILL OPEN AFTER THIS MIGRATION

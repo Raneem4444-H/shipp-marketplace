@@ -66,8 +66,8 @@ COMMIT;
 -- Should return 0 rows.
 SELECT *
 FROM shipp.saved_items
-WHERE request_id IS NULL
-    OR listing_id IS NULL;
+WHERE request_id IS NOT NULL
+    AND listing_id IS NOT NULL;
 -- Confirms the tightened constraint rejects bad inserts (should FAIL —
 -- that failure is the pass condition):
 -- INSERT INTO shipp.saved_items (saved_item_id, user_id, listing_id, saved_at)

@@ -68,6 +68,13 @@ SELECT *
 FROM shipp.saved_items
 WHERE request_id IS NOT NULL
     AND listing_id IS NOT NULL;
+-- Validate schema-level enforcement
+SELECT column_name,
+    is_nullable
+FROM information_schema.columns
+WHERE table_schema = 'shipp'
+    AND table_name = 'saved_items'
+    AND column_name IN ('request_id', 'listing_id');
 -- Confirms the tightened constraint rejects bad inserts (should FAIL —
 -- that failure is the pass condition):
 -- INSERT INTO shipp.saved_items (saved_item_id, user_id, listing_id, saved_at)

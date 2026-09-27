@@ -1,0 +1,1 @@
+# SHIPP shared configuration package.

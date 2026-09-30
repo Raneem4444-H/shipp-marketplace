@@ -1,0 +1,26 @@
+[
+  {
+    "id": "q01",
+    "query": "a table where a family can sit together for dinner",
+    "expected_listing_ids": ["demo-listing-001", "demo-listing-002"],
+    "notes": "Semantic match: no word overlap with 'dining table' titles beyond 'table'."
+  },
+  {
+    "id": "q02",
+    "query": "solid wood furniture for eating meals at home",
+    "expected_listing_ids": ["demo-listing-001"],
+    "notes": "demo-listing-001 is the solid wooden table."
+  },
+  {
+    "id": "q03",
+    "query": "something small to eat at in a studio apartment",
+    "expected_listing_ids": ["demo-listing-002"],
+    "notes": "demo-listing-002 is the compact four-seater for small apartments."
+  },
+  {
+    "id": "q04",
+    "query": "electric guitar amplifier",
+    "expected_listing_ids": [],
+    "notes": "Negative case: nothing relevant exists. Reported (top score), not counted in hit rate."
+  }
+]

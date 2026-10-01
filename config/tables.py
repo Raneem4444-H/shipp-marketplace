@@ -17,3 +17,5 @@ SILVER_ROUTES = f"{CATALOG}.{SILVER_SCHEMA}.silver_routes"
 GOLD_CANDIDATE_MATCHES = f"{CATALOG}.{GOLD_SCHEMA}.gold_candidate_matches"
 GOLD_LISTING_SEARCH_DOCS = f"{CATALOG}.{GOLD_SCHEMA}.gold_listing_search_docs"
 GOLD_MARKETPLACE_METRICS = f"{CATALOG}.{GOLD_SCHEMA}.gold_marketplace_metrics"
+# AI Search
+VS_INDEX_NAME = f"{CATALOG}.{GOLD_SCHEMA}.gold_listing_search_docs_index"

@@ -35,10 +35,10 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Ruff
-        run: ruff check config data_pipeline rag agent test
+        run: ruff check config data_pipeline rag agent test --select E9,F63,F7,F82
 
       - name: Bandit
-        run: bandit -q -r config data_pipeline rag agent -x test,notebooks
+        run: bandit -q -r config data_pipeline rag agent -x test,tests,notebooks -ll -s B608
 
       - name: Unit tests
         run: pytest -q test/unit

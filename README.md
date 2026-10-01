@@ -36,23 +36,6 @@ Lakebase → CDF → gold_marketplace_metrics
         ↓
 Databricks App shows “Saved”
 ```
-
-# Landing Page Overview
-
-![Landing Page Overview](./workFlow/LandPage.png)
-
-# Login/signup Page
-
-![Login/signup Page](./workFlow/loginSignpage.png)
-
-# Posting Page
-
-![Posting Page](./workFlow/postingitemPage.png)
-
-# Review Page
-
-![Review Page](./workFlow/Review_your_item_request.png)
-
 -----------------------------------------------
 
 

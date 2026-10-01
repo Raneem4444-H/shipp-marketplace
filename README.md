@@ -138,3 +138,6 @@ shipp-marketplace/
 
 **Rules:** secrets only in the Databricks secret scope `shipp` · no table name or weight hardcoded in a notebook ·
 one writer per table · CDC logic changes only in `data_pipeline/silver/current_state.py` + its tests.
+
+
+[![Architecture diagram](https://gitdiagram.com/diagram-badge.svg)](https://gitdiagram.com/raneem4444-h/shipp-marketplace?utm_source=readme&utm_medium=badge)

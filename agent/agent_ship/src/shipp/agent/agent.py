@@ -297,11 +297,11 @@ class ShippAgent:
                 user_id,
                 SAVE_TOOL_NAME,
                 listing_id,
-                ActionStatus.FAILED,
+                ActionStatus.ERROR,
             )
 
             return SaveResult(
-                ActionStatus.FAILED,
+                ActionStatus.ERROR,
                 "Couldn't verify this match right now. Nothing was saved.",
             )
 
@@ -317,11 +317,11 @@ class ShippAgent:
                 user_id,
                 SAVE_TOOL_NAME,
                 listing_id,
-                ActionStatus.REJECTED,
+                ActionStatus.REJECTED_NOT_A_MATCH,
             )
 
             return SaveResult(
-                ActionStatus.REJECTED,
+                ActionStatus.REJECTED_NOT_A_MATCH,
                 "This item is not a match for your request.",
             )
 

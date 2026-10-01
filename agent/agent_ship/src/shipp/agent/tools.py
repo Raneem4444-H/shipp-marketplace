@@ -128,6 +128,10 @@ class ToolArgumentError(ValueError):
     pass
 
 
+class NotCandidateError(ToolArgumentError):
+    pass
+
+
 # ----------------------------------------------------------------- toolbox
 class ToolBox:
     """Tool implementations for one agent turn, bound to one user and request."""
@@ -164,18 +168,24 @@ class ToolBox:
             if not isinstance(args, dict):
                 raise ToolArgumentError("Arguments must be a JSON object.")
             payload, entity_id, status = handler(**args)
+        except NotCandidateError as exc:
+            payload, entity_id, status = (
+                {"error": f"Invalid arguments: {exc}"},
+                None,
+                ActionStatus.REJECTED_NOT_A_MATCH,
+            )
         except (json.JSONDecodeError, ToolArgumentError, TypeError) as exc:
             payload, entity_id, status = (
                 {"error": f"Invalid arguments: {exc}"},
                 None,
-                ActionStatus.REJECTED,
+                ActionStatus.ERROR,
             )
         except Exception:
             logger.exception("Tool %s failed", name)
             payload, entity_id, status = (
                 {"error": "This tool failed. Tell the user you could not check this right now."},
                 None,
-                ActionStatus.FAILED,
+                ActionStatus.ERROR,
             )
         self._lakebase.log_activity(self._ctx.user_id, name, entity_id, status)
         return payload
@@ -193,7 +203,7 @@ class ToolBox:
 
     def _require_candidate(self, listing_id: Any) -> CandidateMatch:
         if not isinstance(listing_id, str) or listing_id not in self.candidates():
-            raise ToolArgumentError(
+            raise NotCandidateError(
                 "listing_id is not one of the candidate matches for this request."
             )
         return self.candidates()[listing_id]
@@ -204,7 +214,8 @@ class ToolBox:
         payload: dict[str, Any] = {"matches": [m.to_tool_payload() for m in matches]}
         if not matches:
             payload["note"] = "No eligible listings for this request yet. Recommend nothing."
-        return payload, self._ctx.request_id, ActionStatus.SUCCESS
+        status = ActionStatus.SUCCESS if matches else ActionStatus.NO_MATCH
+        return payload, self._ctx.request_id, status
 
     def _search_listing_context(self, query: Any):
         if not isinstance(query, str) or not query.strip():
@@ -236,7 +247,16 @@ class ToolBox:
             "can_be_saved": reason is None,
             "reason": reason,
         }
-        return payload, listing_id, ActionStatus.SUCCESS
+        status = (
+            ActionStatus.NOT_FOUND
+            if listing is None
+            else (
+                ActionStatus.REJECTED_UNAVAILABLE
+                if reason is not None
+                else ActionStatus.SUCCESS
+            )
+        )
+        return payload, listing_id, status
 
     def _propose_save(self, listing_id: Any, reason: Any):
         match = self._require_candidate(listing_id)
@@ -249,7 +269,11 @@ class ToolBox:
             return (
                 {"proposal_created": False, "reason": blocker},
                 listing_id,
-                ActionStatus.REJECTED,
+                (
+                    ActionStatus.NOT_FOUND
+                    if self._lakebase.get_listing(listing_id) is None
+                    else ActionStatus.REJECTED_UNAVAILABLE
+                ),
             )
         self.pending_save = SaveProposal(
             request_id=self._ctx.request_id,

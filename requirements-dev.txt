@@ -2,3 +2,4 @@
 pyspark==3.5.*
 pytest>=8,<9
 ruff>=0.5
+bandit>=1.7,<2

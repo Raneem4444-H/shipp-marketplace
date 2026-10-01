@@ -1,0 +1,9 @@
+# Runtime dependencies for SHIPP.
+# Keep Spark/pytest/lint/security tooling in requirements-dev.txt.
+
+requests>=2.31,<3
+databricks-sdk>=0.60,<1
+psycopg[binary]>=3.2,<4
+openai>=1.40,<3
+streamlit>=1.40,<2
+python-dotenv>=1.0,<2

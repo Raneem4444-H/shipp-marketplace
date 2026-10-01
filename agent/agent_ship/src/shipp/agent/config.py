@@ -56,8 +56,8 @@ class AgentSettings:
         validate_identifier(self.candidate_matches_table, three_part=True)
         validate_identifier(self.search_index, three_part=True)
         validate_identifier(self.lakebase_schema)
-        if not 1 <= self.max_matches <= 50:
-            raise ValueError("max_matches must be between 1 and 50")
+        if not 1 <= self.max_matches <= 10:
+            raise ValueError("max_matches must be between 1 and 10")
         if not 1 <= self.max_search_results <= 20:
             raise ValueError("max_search_results must be between 1 and 20")
         if not 1 <= self.max_tool_rounds <= 10:

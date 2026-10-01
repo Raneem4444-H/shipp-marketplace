@@ -44,3 +44,38 @@ SCORING = {
     "top_n_per_request": 10,
 }
 # add it 
+
+# --- RAG / Vision / AI Search ---------------------------------------------------
+
+IMAGE_MIME_TYPES = {
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "png": "image/png",
+    "webp": "image/webp",
+}
+
+TEXT_MAX_TITLE_CHARS = 200
+TEXT_MAX_DESCRIPTION_CHARS = 2000
+
+VISION_PROMPT_VERSION = "v1"
+VISION_MAX_IMAGE_BYTES = 5 * 1024 * 1024
+VISION_MAX_DESCRIPTION_CHARS = 600
+VISION_MAX_LABELS = 10
+VISION_MAX_TOKENS = 300
+VISION_TIMEOUT_SECONDS = 30
+VISION_MAX_RETRIES = 3
+VISION_BACKOFF_BASE_SECONDS = 2.0
+VISION_RETRYABLE_STATUS = (429, 500, 502, 503, 504)
+
+SEARCH_DEFAULT_K = 5
+SEARCH_MAX_K = 10
+SEARCH_MAX_QUERY_CHARS = 500
+SEARCH_SNIPPET_CHARS = 400
+SEARCH_RETURN_COLUMNS = [
+    "listing_id",
+    "title",
+    "category",
+    "condition",
+    "status",
+    "search_text",
+]

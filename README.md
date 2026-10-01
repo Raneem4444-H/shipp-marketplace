@@ -1,6 +1,7 @@
 # shipp-marketplace
 Databricks AI Data Engineering Capstone — multi-sided marketplace with data pipelines, RAG, AI agents, and a Databricks App.
 -----------------------------------------------
+[![Watch a one-minute video tour of shipp-marketplace](https://gitdiagram.com/video-badge.svg)](https://gitdiagram.com/raneem4444-h/shipp-marketplace/video)
 
 ## SHIPP Data Architecture
 

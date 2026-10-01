@@ -69,7 +69,9 @@ class GoldReader:
     def get_candidate_matches(
         self, request_id: str, *, limit: int, min_score: float
     ) -> list[CandidateMatch]:
-        limit = int(limit)  # inlined, so force it to an int
+        # LIMIT cannot be bound by the Statement Execution API in this query.
+        # Convert before interpolation and cap the model/app-controlled value.
+        limit = max(1, min(int(limit), 10))
         sql = (
             f"SELECT {', '.join(CANDIDATE_MATCH_COLUMNS)} FROM {self._table} "
             "WHERE request_id = :request_id AND match_score >= :min_score "

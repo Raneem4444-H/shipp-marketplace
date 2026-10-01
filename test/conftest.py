@@ -4,8 +4,11 @@ import sys
 import pytest
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if ROOT not in sys.path:
-    sys.path.insert(0, ROOT)
+AGENT_SRC = os.path.join(ROOT, "agent", "agent_ship", "src")
+
+for path in (ROOT, AGENT_SRC):
+    if path not in sys.path:
+        sys.path.insert(0, path)
 
 
 @pytest.fixture(scope="session")

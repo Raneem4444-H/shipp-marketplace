@@ -37,23 +37,6 @@ Lakebase → CDF → gold_marketplace_metrics
         ↓
 Databricks App shows “Saved”
 ```
-
-# Landing Page Overview
-
-![Landing Page Overview](./workFlow/LandPage.png)
-
-# Login/signup Page
-
-![Login/signup Page](./workFlow/loginSignpage.png)
-
-# Posting Page
-
-![Posting Page](./workFlow/postingitemPage.png)
-
-# Review Page
-
-![Review Page](./workFlow/Review_your_item_request.png)
-
 -----------------------------------------------
 
 
@@ -139,3 +122,160 @@ shipp-marketplace/
 
 **Rules:** secrets only in the Databricks secret scope `shipp` · no table name or weight hardcoded in a notebook ·
 one writer per table · CDC logic changes only in `data_pipeline/silver/current_state.py` + its tests.
+
+
+-----
+### Repository Architecture
+
+The diagram below maps the SHIPP end-to-end architecture to the implementation files in this repository.
+
+```mermaid
+flowchart TD
+
+subgraph group_pipeline["Matching Pipeline"]
+  node_bronze[("Bronze History<br/>config/tables.py")]
+  node_silver["Silver Current State<br/>current_state.py"]
+  node_pairs["Eligible Candidate Pairs<br/>pairs.py"]
+  node_routes_api["ORS Route Enrichment<br/>ors_client.py"]
+  node_silver_routes["Silver Routes<br/>routes.py"]
+  node_scoring["Gold Match Scoring<br/>scoring.py"]
+  node_gold_matches[("Gold Candidate Matches<br/>config/tables.py")]
+end
+
+subgraph group_search["Search & Unstructured Enrichment"]
+  node_content["Listing Content<br/>content.py"]
+  node_vision["Image / Vision Enrichment<br/>vision.py"]
+  node_search_docs["Gold Search Documents<br/>search_docs.py"]
+  node_index[("Databricks AI Search<br/>index.py")]
+  node_retrieval["Semantic Retrieval<br/>retrieval.py"]
+end
+
+subgraph group_agent["AI Agent Workflow"]
+  node_agent["SHIPP Agent<br/>agent.py"]
+  node_model["Chat Model<br/>llm.py"]
+  node_toolbox["Agent Tools<br/>tools.py"]
+  node_gold_reader["Gold Candidate Reader<br/>gold.py"]
+  node_listing_search["AI Search Client<br/>search.py"]
+  node_lakebase_repo["Lakebase Repository<br/>lakebase.py"]
+end
+
+subgraph group_shared["Shared Contracts & Configuration"]
+  node_rules["Save Validation Rules<br/>rules.py"]
+  node_contracts["Agent Contracts<br/>contracts.py"]
+  node_settings["Pipeline Settings<br/>settings.py"]
+  node_tables["Table Registry<br/>tables.py"]
+  node_geo["Geospatial Utilities<br/>geo.py"]
+end
+
+node_people(("Donor / Requester"))
+node_app["Databricks Marketplace App"]
+node_lakebase[("Lakebase<br/>Operational Truth")]
+node_ors["OpenRouteService"]
+
+node_people -->|"uses"| node_app
+
+node_app -->|"operational reads / writes"| node_lakebase
+
+node_lakebase -->|"CDC"| node_bronze
+
+node_bronze -->|"reconstruct current state"| node_silver
+
+node_silver -->|"forms eligible pairs"| node_pairs
+
+node_pairs -->|"requests route enrichment"| node_routes_api
+
+node_routes_api -->|"POST matrix API"| node_ors
+
+node_routes_api -->|"persists raw JSON"| node_bronze
+
+node_bronze -->|"raw ORS responses"| node_silver_routes
+
+node_silver_routes -->|"normalized distance + duration"| node_scoring
+
+node_scoring -->|"scores and ranks"| node_gold_matches
+
+
+node_content -->|"adds image-derived context"| node_vision
+
+node_vision -->|"enriched listing content"| node_search_docs
+
+node_gold_matches -->|"listing / candidate metadata"| node_search_docs
+
+node_search_docs -->|"indexes documents"| node_index
+
+node_index -->|"serves semantic queries"| node_retrieval
+
+
+node_app -->|"asks for recommendation"| node_agent
+
+node_agent -->|"requests completions"| node_model
+
+node_agent -->|"dispatches read tools"| node_toolbox
+
+node_agent -->|"reads candidate matches"| node_gold_reader
+
+node_agent -->|"builds search client"| node_listing_search
+
+node_listing_search -->|"semantic search"| node_retrieval
+
+node_agent -->|"validates / confirms save"| node_lakebase_repo
+
+node_lakebase_repo -->|"reads + writes"| node_lakebase
+
+node_lakebase_repo -->|"validates save"| node_rules
+
+node_agent -->|"uses contracts"| node_contracts
+
+
+node_pairs -->|"geospatial checks"| node_geo
+
+node_pairs -->|"eligibility settings"| node_settings
+
+node_scoring -->|"scoring weights"| node_settings
+
+node_silver -->|"table names"| node_tables
+
+node_gold_matches -->|"table name"| node_tables
+
+
+click node_bronze "https://github.com/raneem4444-h/shipp-marketplace/blob/main/config/tables.py"
+click node_silver "https://github.com/raneem4444-h/shipp-marketplace/blob/main/data_pipeline/silver/current_state.py"
+click node_pairs "https://github.com/raneem4444-h/shipp-marketplace/blob/main/data_pipeline/silver/pairs.py"
+click node_routes_api "https://github.com/raneem4444-h/shipp-marketplace/blob/main/data_pipeline/ingestion/ors_client.py"
+click node_silver_routes "https://github.com/raneem4444-h/shipp-marketplace/blob/main/data_pipeline/silver/routes.py"
+click node_scoring "https://github.com/raneem4444-h/shipp-marketplace/blob/main/data_pipeline/gold/scoring.py"
+click node_gold_matches "https://github.com/raneem4444-h/shipp-marketplace/blob/main/config/tables.py"
+
+click node_content "https://github.com/raneem4444-h/shipp-marketplace/blob/main/rag/content.py"
+click node_vision "https://github.com/raneem4444-h/shipp-marketplace/blob/main/rag/vision.py"
+click node_search_docs "https://github.com/raneem4444-h/shipp-marketplace/blob/main/rag/search_docs.py"
+click node_index "https://github.com/raneem4444-h/shipp-marketplace/blob/main/rag/index.py"
+click node_retrieval "https://github.com/raneem4444-h/shipp-marketplace/blob/main/rag/retrieval.py"
+
+click node_agent "https://github.com/raneem4444-h/shipp-marketplace/blob/main/agent/agent_ship/src/shipp/agent/agent.py"
+click node_model "https://github.com/raneem4444-h/shipp-marketplace/blob/main/agent/agent_ship/src/shipp/agent/llm.py"
+click node_toolbox "https://github.com/raneem4444-h/shipp-marketplace/blob/main/agent/agent_ship/src/tools.py"
+click node_gold_reader "https://github.com/raneem4444-h/shipp-marketplace/blob/main/agent/agent_ship/src/shipp/agent/gold.py"
+click node_listing_search "https://github.com/raneem4444-h/shipp-marketplace/blob/main/agent/agent_ship/src/shipp/agent/search.py"
+click node_lakebase_repo "https://github.com/raneem4444-h/shipp-marketplace/blob/main/agent/agent_ship/src/shipp/agent/lakebase.py"
+
+click node_rules "https://github.com/raneem4444-h/shipp-marketplace/blob/main/agent/agent_ship/src/shipp/agent/rules.py"
+click node_contracts "https://github.com/raneem4444-h/shipp-marketplace/blob/main/agent/agent_ship/src/shipp/agent/contracts.py"
+click node_settings "https://github.com/raneem4444-h/shipp-marketplace/blob/main/config/settings.py"
+click node_tables "https://github.com/raneem4444-h/shipp-marketplace/blob/main/config/tables.py"
+click node_geo "https://github.com/raneem4444-h/shipp-marketplace/blob/main/data_pipeline/common/geo.py"
+
+
+classDef pipeline fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#172554
+classDef search fill:#fef3c7,stroke:#d97706,stroke-width:1.5px,color:#78350f
+classDef agent fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#14532d
+classDef shared fill:#ffe4e6,stroke:#e11d48,stroke-width:1.5px,color:#881337
+classDef app fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px,color:#312e81
+
+class node_bronze,node_silver,node_pairs,node_routes_api,node_silver_routes,node_scoring,node_gold_matches pipeline
+class node_content,node_vision,node_search_docs,node_index,node_retrieval search
+class node_agent,node_model,node_toolbox,node_gold_reader,node_listing_search,node_lakebase_repo,node_people,node_ors agent
+class node_rules,node_contracts,node_settings,node_tables,node_geo shared
+class node_app,node_lakebase app
+```
+

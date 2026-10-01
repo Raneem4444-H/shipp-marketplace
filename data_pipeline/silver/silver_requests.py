@@ -2,8 +2,11 @@ from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
 
+# from config.tables import BRONZE_REQUESTS_HISTORY, SILVER_REQUESTS
 from config.tables import BRONZE_REQUESTS_HISTORY, SILVER_REQUESTS
 
+print(BRONZE_REQUESTS_HISTORY)
+print(SILVER_REQUESTS)
 
 CURRENT_STATE_CHANGE_TYPES = ("insert", "update_postimage")
 

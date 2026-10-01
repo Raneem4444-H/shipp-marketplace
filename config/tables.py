@@ -7,6 +7,8 @@ GOLD_SCHEMA = "shipp_gold"
 # Bronze history
 BRONZE_LISTINGS_HISTORY = f"{CATALOG}.{BRONZE_SCHEMA}.lb_listings_history"
 BRONZE_REQUESTS_HISTORY = f"{CATALOG}.{BRONZE_SCHEMA}.lb_requests_history"
+BRONZE_SAVED_ITEMS_HISTORY = f"{CATALOG}.{BRONZE_SCHEMA}.lb_saved_items_history"
+BRONZE_AGENT_ACTIVITY_HISTORY = f"{CATALOG}.{BRONZE_SCHEMA}.lb_agent_activity_history"
 
 # Silver current state
 SILVER_LISTINGS = f"{CATALOG}.{SILVER_SCHEMA}.silver_listings"

@@ -76,18 +76,38 @@ def mime_type_for(path: str) -> Optional[str]:
 
 def build_payload(image_bytes: bytes, mime_type: str) -> dict:
     data_url = f"data:{mime_type};base64,{base64.b64encode(image_bytes).decode('ascii')}"
+
     return {
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": [
-                {"type": "text", "text": USER_PROMPT},
-                {"type": "image_url", "image_url": {"url": data_url}},
-            ]},
+            {
+                "role": "system",
+                "content": SYSTEM_PROMPT,
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": USER_PROMPT,
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": data_url
+                        },
+                    },
+                ],
+            },
         ],
+
+        # Force a valid JSON object from Databricks Model Serving.
+        "response_format": {
+            "type": "json_object"
+        },
+
         "max_tokens": VISION_MAX_TOKENS,
         "temperature": 0,
     }
-
 
 def extract_message_text(body: str) -> str:
     """OpenAI-style chat response -> assistant text. Raises ValueError if the shape is wrong."""

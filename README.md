@@ -1,4 +1,95 @@
-# shipp-marketplace
+# SHIPP Marketplace
+
+**Databricks Data Engineering + AI Capstone**
+
+SHIPP is a two-sided household-item marketplace designed for people who are
+leaving a location and want to give away useful items, and people who are
+arriving or currently need those items.
+
+The capstone focuses on the data and AI system behind that workflow:
+
+**operational marketplace data → incremental processing → trusted matching →
+semantic retrieval → AI-assisted recommendation → controlled operational action**
+
+---
+
+## Business Problem
+
+Useful household items are often available at the same time that other people
+nearby need them, but finding a suitable match requires more than simple
+keyword search.
+
+A useful recommendation must answer:
+
+- Is the item still available?
+- Does it match the requested category?
+- Is it available before the requester needs it?
+- Is the donor different from the requester?
+- Is the location practically reachable?
+- What does the listing text and image tell us about the item?
+- Can the recommendation be explained and acted on safely?
+
+SHIPP combines operational marketplace data, route enrichment, Spark-based
+matching, unstructured listing content, AI Search, and an AI Agent to answer
+those questions.
+
+---
+
+## Core Business Workflow
+
+```text
+Donor creates Listing                 Requester creates Request
+        │                                      │
+        └──────────────────┬───────────────────┘
+                           ↓
+                       Lakebase
+                  Operational Truth
+                           ↓
+                  Incremental Capture
+                           ↓
+                Bronze → Silver
+                           ↓
+                 Business Eligibility
+                           ↓
+                   Candidate Pairs
+                           ↓
+               OpenRouteService
+                           ↓
+                    Silver Routes
+                           ↓
+                Gold Candidate Matches
+                           │
+             ┌─────────────┴─────────────┐
+             │                           │
+             │                    Listing descriptions
+             │                         + images
+             │                           ↓
+             │                 Unstructured enrichment
+             │                           ↓
+             │                 Gold Search Documents
+             │                           ↓
+             │                    Databricks AI Search
+             │                           │
+             └──────────────┬────────────┘
+                            ↓
+                         AI Agent
+             trusted ranking + semantic context
+                            ↓
+                  Grounded Recommendation
+                            ↓
+                     User Approval
+                            ↓
+                        save_item()
+                            ↓
+                Revalidate current state
+                            ↓
+                         Lakebase
+                saved_items + agent_activity
+                            ↓
+                Analytics / App Feedback
+
+
+<!-- # shipp-marketplace
 Databricks AI Data Engineering Capstone — multi-sided marketplace with data pipelines, RAG, AI agents, and a Databricks App.
 -----------------------------------------------
 [![Watch a one-minute video tour of shipp-marketplace](https://gitdiagram.com/video-badge.svg)](https://gitdiagram.com/raneem4444-h/shipp-marketplace/video)
@@ -406,4 +497,4 @@ class node_bronze,node_current,node_silver_entities,node_pairs,node_ors_client,n
 class node_content,node_vision,node_text,node_search_docs,node_index,node_retrieval toneAmber
 class node_agent_core,node_tools,node_gold_reader,node_agent_search,node_agent_lakebase,node_model,node_people,node_ors toneMint
 class node_geo,node_rules,node_contracts,node_settings,node_tables toneRose
-class node_app,node_lakebase,node_workspace toneIndigo```
+class node_app,node_lakebase,node_workspace toneIndigo``` -->

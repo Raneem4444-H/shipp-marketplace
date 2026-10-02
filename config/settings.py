@@ -52,7 +52,7 @@ MAX_STRAIGHT_LINE_KM = 100.0
 ORS_SECRET_SCOPE = "shipp"
 ORS_SECRET_KEY = "ors-api-key"
 
-# Endpoint already used by SHIPP.
+# Endpoint already used and tested by SHIPP.
 ORS_MATRIX_BASE = "https://api.heigit.org/openrouteservice/v2/matrix/"
 
 ORS_PROFILE = "driving-car"
@@ -113,8 +113,7 @@ SCORING = {
 # Listing images / unstructured content
 # =============================================================================
 
-# IMPORTANT:
-# This must remain a dictionary.
+# Must remain a dictionary.
 # rag/vision.py uses IMAGE_MIME_TYPES.get(extension).
 IMAGE_MIME_TYPES = {
     "jpg": "image/jpeg",
@@ -144,7 +143,7 @@ VISION_ENDPOINT = "databricks-gemini-3-5-flash"
 VISION_MAX_CALLS_PER_RUN = 10
 VISION_MIN_SECONDS_BETWEEN_CALLS = 1.0
 
-# Input/output limits.
+# Input / output limits.
 VISION_MAX_IMAGE_BYTES = 5 * 1024 * 1024
 VISION_MAX_DESCRIPTION_CHARS = 600
 VISION_MAX_LABELS = 10
@@ -164,7 +163,7 @@ VISION_RETRYABLE_STATUS = (
     504,
 )
 
-# silver_listing_content vocabulary.
+# silver_listing_content status vocabulary.
 VISION_STATUSES = (
     "OK",
     "FAILED",
@@ -197,11 +196,35 @@ SEARCH_RETURN_COLUMNS = [
 
 
 # =============================================================================
+# Databricks AI Search runtime
+# =============================================================================
+
+# SHIPP-owned Vector Search endpoint.
+# Notebook 54 / rag.index will reuse it when it exists,
+# otherwise it will attempt to create it.
+VS_ENDPOINT_NAME = "shipp-vs"
+
+# Verified READY in your Databricks workspace.
+EMBEDDING_ENDPOINT = "databricks-gte-large-en"
+
+
+# =============================================================================
 # Databricks AI Search index synchronization
 # =============================================================================
 
-# Poll frequency while waiting for a triggered Delta Sync.
+# Poll interval while waiting for Delta Sync.
 INDEX_SYNC_POLL_SECONDS = 10
 
-# Maximum wait for the Vector Search index to become ready.
+# Maximum wait for the index to become ready and synchronized.
 INDEX_SYNC_TIMEOUT_SECONDS = 900
+
+
+# =============================================================================
+# AI Search validation probe
+# =============================================================================
+
+# Semantic validation query: intentionally not the exact listing title.
+RAG_PROBE_QUERY = "solid wooden table for a household dining area"
+
+# Expected listing used by notebook 54 validation.
+RAG_PROBE_EXPECTED_LISTING = "demo-listing-001"

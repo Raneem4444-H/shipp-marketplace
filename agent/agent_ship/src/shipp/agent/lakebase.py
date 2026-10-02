@@ -80,9 +80,19 @@ class LakebaseRepo:
                     (request_id,),
                 )
                 req_row = cur.fetchone()
-                reason = check_request_usable(
-                    RequestState(*req_row) if req_row else None, user_id
-                )
+                request = RequestState(*req_row) if req_row else None
+                reason = check_request_usable(request, user_id)
+
+                if reason is not None:
+                    if request is None:
+                        status = ActionStatus.NOT_FOUND
+                    elif request.requester_id != user_id:
+                        status = ActionStatus.REJECTED_NOT_OWNER
+                    else:
+                        status = ActionStatus.REJECTED_REQUEST_CLOSED
+
+                    self._insert_activity(cur, user_id, listing_id, status, now)
+                    return SaveResult(status, reason)
 
                 if reason is None:
                     cur.execute(
@@ -96,8 +106,13 @@ class LakebaseRepo:
                     )
 
                 if reason is not None:
-                    self._insert_activity(cur, user_id, listing_id, ActionStatus.REJECTED, now)
-                    return SaveResult(ActionStatus.REJECTED, reason)
+                    status = (
+                        ActionStatus.NOT_FOUND
+                        if lst_row is None
+                        else ActionStatus.REJECTED_UNAVAILABLE
+                    )
+                    self._insert_activity(cur, user_id, listing_id, status, now)
+                    return SaveResult(status, reason)
 
                 saved_item_id = str(uuid4())
                 cur.execute(
@@ -109,9 +124,9 @@ class LakebaseRepo:
                     (saved_item_id, user_id, request_id, listing_id, now),
                 )
                 if cur.fetchone() is None:
-                    self._insert_activity(cur, user_id, listing_id, ActionStatus.DUPLICATE, now)
+                    self._insert_activity(cur, user_id, listing_id, ActionStatus.REJECTED_DUPLICATE, now)
                     return SaveResult(
-                        ActionStatus.DUPLICATE, "You already saved this item for this request."
+                        ActionStatus.REJECTED_DUPLICATE, "You already saved this item for this request."
                     )
 
                 self._insert_activity(cur, user_id, listing_id, ActionStatus.SUCCESS, now)
@@ -120,9 +135,9 @@ class LakebaseRepo:
         except Exception:
             logger.exception("save_item failed for listing %s", listing_id)
             # The transaction above rolled back, so record the failure separately.
-            self.log_activity(user_id, SAVE_TOOL_NAME, listing_id, ActionStatus.FAILED)
+            self.log_activity(user_id, SAVE_TOOL_NAME, listing_id, ActionStatus.ERROR)
             return SaveResult(
-                ActionStatus.FAILED, "The save failed because of a system error. Nothing was saved."
+                ActionStatus.ERROR, "The save failed because of a system error. Nothing was saved."
             )
 
     def log_activity(

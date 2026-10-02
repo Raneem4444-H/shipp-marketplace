@@ -49,12 +49,17 @@ SEARCH_DOC_COLUMNS: tuple[str, ...] = (
 
 
 class ActionStatus(StrEnum):
-    """Values written to agent_activity.action_status."""
+    """Exact values accepted by Lakebase agent_activity.action_status."""
 
-    SUCCESS = "success"
-    REJECTED = "rejected"
-    DUPLICATE = "duplicate"
-    FAILED = "failed"
+    SUCCESS = "SUCCESS"
+    NO_MATCH = "NO_MATCH"
+    NOT_FOUND = "NOT_FOUND"
+    REJECTED_UNAVAILABLE = "REJECTED_UNAVAILABLE"
+    REJECTED_DUPLICATE = "REJECTED_DUPLICATE"
+    REJECTED_NOT_A_MATCH = "REJECTED_NOT_A_MATCH"
+    REJECTED_NOT_OWNER = "REJECTED_NOT_OWNER"
+    REJECTED_REQUEST_CLOSED = "REJECTED_REQUEST_CLOSED"
+    ERROR = "ERROR"
 
 
 class ContractError(RuntimeError):

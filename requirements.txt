@@ -1,5 +1,5 @@
-# Runtime dependencies for SHIPP.
-# Keep Spark/pytest/lint/security tooling in requirements-dev.txt.
+# SHIPP runtime dependencies for the Databricks App and Python runtime code.
+# PySpark is not listed here because Databricks compute provides Spark.
 
 requests>=2.31,<3
 databricks-sdk>=0.60,<1

@@ -1,4 +1,8 @@
+# Local development and CI dependencies.
+# Includes runtime dependencies from requirements.txt.
+
 -r requirements.txt
+
 pyspark==3.5.*
 pytest>=8,<9
 ruff>=0.5

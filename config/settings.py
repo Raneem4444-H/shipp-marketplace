@@ -196,6 +196,19 @@ SEARCH_RETURN_COLUMNS = [
 
 
 # =============================================================================
+# RAG retrieval evaluation
+# =============================================================================
+
+# Notebook 55 evaluates whether an expected listing appears in the top K.
+RAG_EVAL_K = 3
+
+# P0 retrieval quality requirement for the current curated evaluation set.
+# All positive evaluation cases must retrieve at least one expected listing
+# within the top K.
+RAG_EVAL_MIN_HIT_RATE = 1.0
+
+
+# =============================================================================
 # Databricks AI Search runtime
 # =============================================================================
 

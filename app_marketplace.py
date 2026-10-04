@@ -21,6 +21,24 @@ class MarketplaceRepo:
         self._connect = connect
         self._schema = schema
 
+    def list_users(self, role_id: str) -> list[dict[str, str]]:
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT u.user_id, u.name
+                FROM {self._schema}.users u
+                JOIN {self._schema}.user_roles ur
+                  ON ur.user_id = u.user_id
+                WHERE ur.role_id = %s
+                  AND u.is_active = TRUE
+                ORDER BY u.name
+                """,
+                (role_id,),
+            )
+            rows = cur.fetchall()
+
+        return [{"user_id": row[0], "name": row[1]} for row in rows]
+
     def create_listing(
         self,
         *,

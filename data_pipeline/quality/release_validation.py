@@ -1,1 +1,189 @@
-"""Read-only SHIPP release validation checks.\n\nThis module validates persisted outputs from the existing 90/91 pipelines.\nIt does not rebuild, rewrite, or replace any validated SHIPP data product.\n\nThe caller is responsible for persisting the returned check results to the\nrelease validation log table.\n"""\n\nfrom __future__ import annotations\n\nfrom dataclasses import dataclass\nfrom typing import Any, Mapping\n\nfrom pyspark.sql import functions as F\n\n\n@dataclass(frozen=True)\nclass ValidationCheck:\n    check_name: str\n    status: str\n    observed_value: str\n    detail: str\n\n\ndef _table_exists(spark: Any, table_name: str) -> bool:\n    try:\n        spark.sql(f"DESCRIBE TABLE {table_name}").limit(1).collect()\n        return True\n    except Exception:\n        return False\n\n\ndef _add(\n    checks: list[ValidationCheck],\n    name: str,\n    passed: bool,\n    observed: Any,\n    detail: str,\n) -> None:\n    checks.append(\n        ValidationCheck(\n            check_name=name,\n            status="PASS" if passed else "FAIL",\n            observed_value=str(observed),\n            detail=detail,\n        )\n    )\n\n\ndef run_release_validation(\n    spark: Any,\n    tables: Mapping[str, str],\n) -> tuple[dict[str, Any], list[ValidationCheck]]:\n    """Validate the current persisted SHIPP release outputs.\n\n    Required keys in tables:\n      silver_listings, silver_requests, silver_routes,\n      gold_candidate_matches, gold_listing_search_docs,\n      gold_marketplace_metrics, rag_eval_results, pipeline_run_log.\n\n    Returns:\n      (summary, checks)\n\n    The function is intentionally read-only.\n    """\n\n    checks: list[ValidationCheck] = []\n\n    required = {\n        "silver_listings",\n        "silver_requests",\n        "silver_routes",\n        "gold_candidate_matches",\n        "gold_listing_search_docs",\n        "gold_marketplace_metrics",\n        "rag_eval_results",\n        "pipeline_run_log",\n    }\n\n    missing_contract_keys = sorted(required - set(tables))\n    _add(\n        checks,\n        "validation_table_contract",\n        not missing_contract_keys,\n        missing_contract_keys,\n        "All required release-validation table names must be supplied.",\n    )\n\n    if missing_contract_keys:\n        return (\n            {\n                "status": "FAIL",\n                "request_count": 0,\n                "request_categories": [],\n                "gold_match_count": 0,\n                "search_doc_count": 0,\n                "failed_checks": [c.check_name for c in checks if c.status == "FAIL"],\n            },\n            checks,\n        )\n\n    existence: dict[str, bool] = {}\n    for key in sorted(required):\n        exists = _table_exists(spark, tables[key])\n        existence[key] = exists\n        _add(checks, f"table_exists:{key}", exists, exists, tables[key])\n\n    if not all(existence.values()):\n        return (\n            {\n                "status": "FAIL",\n                "request_count": 0,\n                "request_categories": [],\n                "gold_match_count": 0,\n                "search_doc_count": 0,\n                "failed_checks": [c.check_name for c in checks if c.status == "FAIL"],\n            },\n            checks,\n        )\n\n    listings = spark.table(tables["silver_listings"])\n    requests = spark.table(tables["silver_requests"])\n    routes = spark.table(tables["silver_routes"])\n    gold = spark.table(tables["gold_candidate_matches"])\n    search_docs = spark.table(tables["gold_listing_search_docs"])\n    metrics = spark.table(tables["gold_marketplace_metrics"])\n    rag_eval = spark.table(tables["rag_eval_results"])\n    pipeline_log = spark.table(tables["pipeline_run_log"])\n\n    row_counts = {\n        "silver_listings": listings.count(),\n        "silver_requests": requests.count(),\n        "silver_routes": routes.count(),\n        "gold_candidate_matches": gold.count(),\n        "gold_listing_search_docs": search_docs.count(),\n        "gold_marketplace_metrics": metrics.count(),\n        "rag_eval_results": rag_eval.count(),\n        "pipeline_run_log": pipeline_log.count(),\n    }\n\n    for key, count in row_counts.items():\n        _add(\n            checks,\n            f"non_empty:{key}",\n            count > 0,\n            count,\n            f"{tables[key]} must contain persisted runtime evidence.",\n        )\n\n    duplicate_listings = (\n        listings.groupBy("listing_id").count().filter(F.col("count") > 1).count()\n    )\n    _add(\n        checks,\n        "silver_listings_unique_listing_id",\n        duplicate_listings == 0,\n        duplicate_listings,\n        "silver_listings grain must remain one current row per listing_id.",\n    )\n\n    duplicate_requests = (\n        requests.groupBy("request_id").count().filter(F.col("count") > 1).count()\n    )\n    _add(\n        checks,\n        "silver_requests_unique_request_id",\n        duplicate_requests == 0,\n        duplicate_requests,\n        "silver_requests grain must remain one current row per request_id.",\n    )\n\n    null_request_categories = requests.filter(F.col("category").isNull()).count()\n    _add(\n        checks,\n        "silver_requests_category_not_null",\n        null_request_categories == 0,\n        null_request_categories,\n        "Every persisted Silver request must retain a category.",\n    )\n\n    request_categories = [\n        row["category"]\n        for row in (\n            requests.select("category")\n            .where(F.col("category").isNotNull())\n            .distinct()\n            .orderBy("category")\n            .collect()\n        )\n    ]\n\n    orphan_gold_requests = (\n        gold.select("request_id").distinct()\n        .join(requests.select("request_id").distinct(), "request_id", "left_anti")\n        .count()\n    )\n    _add(\n        checks,\n        "gold_requests_exist_in_silver",\n        orphan_gold_requests == 0,\n        orphan_gold_requests,\n        "Every Gold match request_id must trace to silver_requests.",\n    )\n\n    category_mismatches = (\n        gold.alias("g")\n        .join(\n            requests.select("request_id", "category").alias("r"),\n            F.col("g.request_id") == F.col("r.request_id"),\n            "left",\n        )\n        .filter(\n            F.col("r.request_id").isNull()\n            | (F.col("g.category") != F.col("r.category"))\n        )\n        .count()\n    )\n    _add(\n        checks,\n        "gold_category_matches_request_category",\n        category_mismatches == 0,\n        category_mismatches,\n        "Gold category must preserve the trusted request category contract.",\n    )\n\n    invalid_routes = routes.filter(\n        (F.col("distance_km").isNotNull() & (F.col("distance_km") < 0))\n        | (F.col("duration_min").isNotNull() & (F.col("duration_min") < 0))\n    ).count()\n    _add(\n        checks,\n        "silver_routes_non_negative",\n        invalid_routes == 0,\n        invalid_routes,\n        "Persisted route distance/duration cannot be negative.",\n    )\n\n    pending_gold_routes = gold.filter(F.col("route_status") == "PENDING").count()\n    _add(\n        checks,\n        "gold_has_no_pending_routes",\n        pending_gold_routes == 0,\n        pending_gold_routes,\n        "Release Gold must not contain unresolved route dependencies.",\n    )\n\n    invalid_scores = gold.filter(\n        F.col("match_score").isNull()\n        | (F.col("match_score") < 0)\n        | (F.col("match_score") > 1)\n    ).count()\n    _add(\n        checks,\n        "gold_match_score_bounds",\n        invalid_scores == 0,\n        invalid_scores,\n        "match_score must be non-null and within [0, 1].",\n    )\n\n    duplicate_gold_pairs = (\n        gold.groupBy("request_id", "listing_id")\n        .count()\n        .filter(F.col("count") > 1)\n        .count()\n    )\n    _add(\n        checks,\n        "gold_unique_request_listing_pair",\n        duplicate_gold_pairs == 0,\n        duplicate_gold_pairs,\n        "Gold must contain at most one row per request/listing pair.",\n    )\n\n    duplicate_search_docs = (\n        search_docs.groupBy("listing_id").count().filter(F.col("count") > 1).count()\n    )\n    _add(\n        checks,\n        "search_docs_unique_listing_id",\n        duplicate_search_docs == 0,\n        duplicate_search_docs,\n        "Search-doc grain must remain one row per listing_id.",\n    )\n\n    null_search_docs = search_docs.filter(\n        F.col("listing_id").isNull() | F.col("search_text").isNull()\n    ).count()\n    _add(\n        checks,\n        "search_docs_required_fields",\n        null_search_docs == 0,\n        null_search_docs,\n        "Search documents require listing_id and search_text for traceability.",\n    )\n\n    latest_run_ids = [\n        row["run_id"]\n        for row in (\n            pipeline_log.groupBy("run_id")\n            .agg(F.max("ended_at").alias("last_ended_at"))\n            .orderBy(F.col("last_ended_at").desc())\n            .limit(2)\n            .collect()\n        )\n    ]\n\n    failed_latest_stages = 0\n    if latest_run_ids:\n        failed_latest_stages = (\n            pipeline_log\n            .filter(F.col("run_id").isin(latest_run_ids))\n            .filter(F.col("status") != "PASS")\n            .count()\n        )\n\n    _add(\n        checks,\n        "latest_pipeline_runs_pass",\n        len(latest_run_ids) == 2 and failed_latest_stages == 0,\n        {"latest_run_ids": latest_run_ids, "failed_stages": failed_latest_stages},\n        "The two latest orchestration runs should represent successful 90 and 91 executions.",\n    )\n\n    failed_checks = [c.check_name for c in checks if c.status == "FAIL"]\n    summary = {\n        "status": "PASS" if not failed_checks else "FAIL",\n        "request_count": row_counts["silver_requests"],\n        "request_categories": request_categories,\n        "gold_match_count": row_counts["gold_candidate_matches"],\n        "search_doc_count": row_counts["gold_listing_search_docs"],\n        "failed_checks": failed_checks,\n    }\n    return summary, checks\n
+"""Read-only release checks for SHIPP Tasks 90 and 91."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Mapping
+
+from pyspark.sql import functions as F
+from pyspark.sql.window import Window
+
+
+@dataclass(frozen=True)
+class ValidationCheck:
+    check_name: str
+    status: str
+    observed_value: str
+    detail: str
+
+
+EXPECTED_STAGES = (
+    "10_silver_listings", "11_silver_requests", "30_candidate_pairs",
+    "31_ors_enrichment", "32_silver_routes", "40_gold_matches",
+    "60_marketplace_metrics", "50_silver_listing_files",
+    "51_vision_enrichment", "52_silver_listing_content",
+    "53_gold_search_docs", "54_ai_search_index", "55_rag_eval",
+    "56_semantic_scores",
+)
+
+
+def _exists(spark: Any, table: str) -> bool:
+    try:
+        spark.sql(f"DESCRIBE TABLE {table}").limit(1).collect()
+        return True
+    except Exception:
+        return False
+
+
+def _check(out: list[ValidationCheck], name: str, ok: bool, value: Any, detail: str) -> None:
+    out.append(ValidationCheck(name, "PASS" if ok else "FAIL", str(value), detail))
+
+
+def run_release_validation(
+    spark: Any,
+    tables: Mapping[str, str],
+) -> tuple[dict[str, Any], list[ValidationCheck]]:
+    """Validate persisted P0 outputs without rewriting business tables."""
+
+    checks: list[ValidationCheck] = []
+    required = (
+        "bronze_route_responses", "bronze_vision_responses",
+        "silver_listings", "silver_requests", "silver_routes",
+        "silver_listing_files", "silver_listing_content",
+        "silver_semantic_scores", "gold_candidate_matches",
+        "gold_listing_search_docs", "gold_marketplace_metrics",
+        "rag_eval_results", "pipeline_run_log",
+    )
+
+    missing_names = [k for k in required if k not in tables]
+    _check(checks, "validation_table_contract", not missing_names, missing_names,
+           "Required canonical table names are supplied.")
+    if missing_names:
+        return _summary(checks), checks
+
+    missing_tables = [k for k in required if not _exists(spark, tables[k])]
+    for key in required:
+        _check(checks, f"table_exists:{key}", key not in missing_tables,
+               key not in missing_tables, tables[key])
+    if missing_tables:
+        return _summary(checks), checks
+
+    frames = {k: spark.table(tables[k]) for k in required}
+    counts = {k: frames[k].count() for k in required}
+    for key, count in counts.items():
+        _check(checks, f"non_empty:{key}", count > 0, count,
+               "Persisted runtime evidence must be non-empty.")
+
+    listings = frames["silver_listings"]
+    requests = frames["silver_requests"]
+    routes = frames["silver_routes"]
+    gold = frames["gold_candidate_matches"]
+    docs = frames["gold_listing_search_docs"]
+    log = frames["pipeline_run_log"]
+
+    dup_requests = requests.groupBy("request_id").count().filter("count > 1").count()
+    _check(checks, "silver_requests_unique_request_id", dup_requests == 0,
+           dup_requests, "One current row per request_id.")
+
+    bad_request_fields = requests.filter(
+        F.col("request_id").isNull() | F.col("category").isNull()
+    ).count()
+    _check(checks, "silver_requests_required_fields", bad_request_fields == 0,
+           bad_request_fields, "Request id and category are required.")
+
+    request_categories = [
+        r["category"] for r in requests.select("category")
+        .where(F.col("category").isNotNull()).distinct().orderBy("category").collect()
+    ]
+    listing_categories = [
+        r["category"] for r in listings.select("category")
+        .where(F.col("category").isNotNull()).distinct().orderBy("category").collect()
+    ]
+    _check(checks, "request_categories_present", bool(request_categories),
+           request_categories, "Distinct request categories captured.")
+    _check(checks, "listing_categories_present", bool(listing_categories),
+           listing_categories, "Distinct listing categories captured.")
+
+    orphan_requests = gold.select("request_id").distinct().join(
+        requests.select("request_id").distinct(), "request_id", "left_anti"
+    ).count()
+    _check(checks, "gold_requests_exist_in_silver", orphan_requests == 0,
+           orphan_requests, "Gold request ids trace to Silver.")
+
+    category_mismatch = gold.alias("g").join(
+        requests.select("request_id", "category").alias("r"),
+        F.col("g.request_id") == F.col("r.request_id"), "left"
+    ).filter(
+        F.col("r.request_id").isNull() | (F.col("g.category") != F.col("r.category"))
+    ).count()
+    _check(checks, "gold_category_matches_request_category", category_mismatch == 0,
+           category_mismatch, "Gold preserves trusted request category.")
+
+    invalid_routes = routes.filter(
+        (F.col("distance_km").isNotNull() & (F.col("distance_km") < 0))
+        | (F.col("duration_min").isNotNull() & (F.col("duration_min") < 0))
+    ).count()
+    _check(checks, "silver_routes_non_negative", invalid_routes == 0,
+           invalid_routes, "Route distance/duration cannot be negative.")
+
+    pending = gold.filter(F.col("route_status") == "PENDING").count()
+    _check(checks, "gold_has_no_pending_routes", pending == 0, pending,
+           "Gold must not contain unresolved routes.")
+
+    invalid_scores = gold.filter(
+        F.col("match_score").isNull()
+        | (F.col("match_score") < 0)
+        | (F.col("match_score") > 1)
+    ).count()
+    _check(checks, "gold_match_score_bounds", invalid_scores == 0,
+           invalid_scores, "match_score must be within [0,1].")
+
+    dup_pairs = gold.groupBy("request_id", "listing_id").count().filter("count > 1").count()
+    _check(checks, "gold_unique_request_listing_pair", dup_pairs == 0,
+           dup_pairs, "One Gold row per request/listing pair.")
+
+    bad_docs = docs.filter(
+        F.col("listing_id").isNull() | F.col("search_text").isNull()
+    ).count()
+    _check(checks, "search_docs_required_fields", bad_docs == 0, bad_docs,
+           "Search docs require listing_id and search_text.")
+
+    latest = log.filter(F.col("stage").isin(list(EXPECTED_STAGES))).withColumn(
+        "_rn",
+        F.row_number().over(
+            Window.partitionBy("stage").orderBy(
+                F.col("ended_at").desc(), F.col("started_at").desc()
+            )
+        ),
+    ).filter(F.col("_rn") == 1).select("stage", "status").collect()
+
+    status_by_stage = {r["stage"]: r["status"] for r in latest}
+    missing_stages = [s for s in EXPECTED_STAGES if s not in status_by_stage]
+    failed_stages = [s for s in EXPECTED_STAGES if status_by_stage.get(s) not in (None, "PASS")]
+    _check(checks, "latest_pipeline_stages_pass",
+           not missing_stages and not failed_stages,
+           {"missing": missing_stages, "failed": failed_stages},
+           "Every expected 90/91 stage has a latest PASS.")
+
+    summary = _summary(checks)
+    summary.update(
+        request_count=counts["silver_requests"],
+        request_categories=request_categories,
+        listing_categories=listing_categories,
+        gold_match_count=counts["gold_candidate_matches"],
+        search_doc_count=counts["gold_listing_search_docs"],
+    )
+    return summary, checks
+
+
+def _summary(checks: list[ValidationCheck]) -> dict[str, Any]:
+    failed = [c.check_name for c in checks if c.status == "FAIL"]
+    return {
+        "status": "PASS" if not failed else "FAIL",
+        "request_count": 0,
+        "request_categories": [],
+        "listing_categories": [],
+        "gold_match_count": 0,
+        "search_doc_count": 0,
+        "failed_checks": failed,
+    }

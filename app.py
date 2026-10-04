@@ -9,6 +9,7 @@ import html
 import os
 from datetime import date, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 import sys
 
 import folium
@@ -30,7 +31,6 @@ if str(AGENT_SRC) not in sys.path:
 from app_marketplace import MarketplaceRepo
 from shipp.agent.agent import ShippAgent
 from shipp.agent.clients import build_lakebase_connect, build_workspace_client
-from shipp.agent.config import AgentSettings
 
 
 # ------------------------------------------------------------
@@ -99,7 +99,17 @@ def load_agent() -> ShippAgent:
 
 @st.cache_resource
 def load_marketplace() -> MarketplaceRepo:
-    settings = AgentSettings.from_env()
+    # Marketplace startup only needs Databricks auth + Lakebase settings.
+    # Do not require Agent-only config (LLM, SQL warehouse, AI Search)
+    # just to render the frontend or use operational donor/requester flows.
+    settings = SimpleNamespace(
+        lakebase_schema=os.getenv("SHIPP_LAKEBASE_SCHEMA", "shipp"),
+        lakebase_endpoint=(
+            os.getenv("SHIPP_LAKEBASE_ENDPOINT")
+            or os.getenv("ENDPOINT_NAME")
+        ),
+        lakebase_instance=os.getenv("SHIPP_LAKEBASE_INSTANCE"),
+    )
     workspace = build_workspace_client()
     connect = build_lakebase_connect(settings, workspace)
 
@@ -115,15 +125,28 @@ def load_marketplace() -> MarketplaceRepo:
 
 
 try:
-    agent = load_agent()
     marketplace = load_marketplace()
 except Exception as exc:
     st.error(
-        "SHIPP cannot reach its Databricks resources right now. "
-        "Please refresh the app or try again shortly."
+        "SHIPP cannot reach its Lakebase/Databricks marketplace resources "
+        "right now. Please refresh the app or try again shortly."
     )
     st.code(str(exc))
     st.stop()
+
+# External hosts such as Streamlit Community Cloud do not receive Databricks
+# App resource bindings automatically. Missing Agent-only environment
+# variables must not prevent the marketplace frontend from starting.
+agent = None
+agent_startup_error = None
+try:
+    agent = load_agent()
+except Exception as exc:
+    agent_startup_error = str(exc)
+    st.warning(
+        "Marketplace is online, but SHIPP AI Advisor is not configured for "
+        "this deployment yet. Donor/requester marketplace flows remain available."
+    )
 
 
 @st.cache_data(ttl=120, show_spinner=False)
@@ -400,6 +423,20 @@ def run_agent_turn(
     request_id: str,
     prompt: str,
 ) -> None:
+    if agent is None:
+        st.session_state.messages.append(
+            {
+                "role": "assistant",
+                "content": (
+                    "SHIPP AI Advisor is not configured for this deployment yet. "
+                    "The operational marketplace remains available."
+                ),
+            }
+        )
+        if agent_startup_error:
+            st.caption(f"AI configuration: {agent_startup_error}")
+        return
+
     try:
         with st.spinner("SHIPP is checking trusted matches and current availability..."):
             turn = agent.chat(
@@ -931,18 +968,28 @@ else:
             with st.expander("♡ Saved", expanded=False):
                 render_saved_items(user_id, request_id)
 
-        try:
-            matches = agent.get_candidate_matches(
-                user_id=user_id,
-                request_id=request_id,
-            )
-        except Exception as exc:
+        if agent is None:
             matches = []
-            st.warning(
-                "Trusted candidate matches are temporarily unavailable. "
-                "You can retry after the pipeline or warehouse is ready."
+            st.info(
+                "Trusted AI matching is not configured for this external "
+                "deployment yet. Marketplace browsing and request creation "
+                "remain available."
             )
-            st.code(str(exc))
+            if agent_startup_error:
+                st.caption(f"AI configuration: {agent_startup_error}")
+        else:
+            try:
+                matches = agent.get_candidate_matches(
+                    user_id=user_id,
+                    request_id=request_id,
+                )
+            except Exception as exc:
+                matches = []
+                st.warning(
+                    "Trusted candidate matches are temporarily unavailable. "
+                    "You can retry after the pipeline or warehouse is ready."
+                )
+                st.code(str(exc))
 
         browse_mode = st.radio(
             "Browse",

@@ -8,6 +8,7 @@ def test_bootstrap_streamlit_secrets_supports_sections(monkeypatch):
         "DATABRICKS_CLIENT_SECRET",
         "PGHOST",
         "PGDATABASE",
+        "PGUSER",
         "SHIPP_LAKEBASE_ENDPOINT",
         "SHIPP_LLM_ENDPOINT",
         "SHIPP_SQL_WAREHOUSE_ID",
@@ -25,6 +26,7 @@ def test_bootstrap_streamlit_secrets_supports_sections(monkeypatch):
         "lakebase": {
             "PGHOST": "db.example",
             "PGDATABASE": "databricks_postgres",
+            "PGUSER": "service-principal-client-id",
             "SHIPP_LAKEBASE_ENDPOINT": "projects/p/branches/b/endpoints/e",
         },
         "shipp": {

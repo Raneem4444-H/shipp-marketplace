@@ -117,11 +117,12 @@ def load_marketplace() -> MarketplaceRepo:
 try:
     agent = load_agent()
     marketplace = load_marketplace()
-except Exception:
+except Exception as exc:
     st.error(
         "SHIPP cannot reach its Databricks resources right now. "
         "Please refresh the app or try again shortly."
     )
+    st.code(str(exc))
     st.stop()
 
 
@@ -270,7 +271,7 @@ def run_agent_turn(
         st.session_state.pending_save = turn.pending_save
         st.session_state.tool_trace = turn.tool_trace
 
-    except Exception:
+    except Exception as exc:
         st.session_state.messages.append(
             {
                 "role": "assistant",
@@ -280,13 +281,15 @@ def run_agent_turn(
                 ),
             }
         )
+        st.code(str(exc))
 
 
 def render_saved_items(user_id: str, request_id: str) -> None:
     try:
         saved_items = marketplace.list_saved_items(user_id, request_id)
-    except Exception:
+    except Exception as exc:
         st.caption("Saved items are temporarily unavailable.")
+        st.code(str(exc))
         return
 
     if not saved_items:
@@ -516,7 +519,8 @@ if persona == "Give an item":
                         f"Your item is live with {len(saved_images)} photo"
                         f"{'s' if len(saved_images) != 1 else ''}."
                     )
-                except Exception:
+                except Exception as exc:
+                    st.code(str(exc))
                     st.warning(
                         "The listing was published, but the photos could not be "
                         "stored. Check the App service-principal access to the "
@@ -528,8 +532,9 @@ if persona == "Give an item":
                     "the listing available for trusted matching."
                 )
 
-            except Exception:
+            except Exception as exc:
                 st.error("The item could not be published. No duplicate action was attempted.")
+                st.code(str(exc))
 
 
 # ============================================================
@@ -645,8 +650,9 @@ else:
                         "New requests become browsable after the existing SHIPP "
                         "incremental pipeline refreshes trusted Gold matches."
                     )
-                except Exception:
+                except Exception as exc:
                     st.error("The request could not be created.")
+                    st.code(str(exc))
 
         if selected_request_id is None:
             selected_request_id = st.session_state.last_created_request_id
@@ -654,8 +660,9 @@ else:
     else:
         try:
             requests = marketplace.list_requests(requester_id)
-        except Exception:
+        except Exception as exc:
             st.error("Your requests are temporarily unavailable.")
+            st.code(str(exc))
             st.stop()
 
         if not requests:
@@ -708,12 +715,13 @@ else:
                 user_id=user_id,
                 request_id=request_id,
             )
-        except Exception:
+        except Exception as exc:
             matches = []
             st.warning(
                 "Trusted candidate matches are temporarily unavailable. "
                 "You can retry after the pipeline or warehouse is ready."
             )
+            st.code(str(exc))
 
         browse_mode = st.radio(
             "Browse",
@@ -1074,11 +1082,12 @@ else:
                                 "SHIPP rechecked the current listing state and "
                                 f"did not save the item: {result.message}"
                             )
-                    except Exception:
+                    except Exception as exc:
                         st.error(
                             "The save could not be completed. No unconfirmed "
                             "write was performed."
                         )
+                        st.code(str(exc))
 
         if st.session_state.tool_trace:
             with st.expander(

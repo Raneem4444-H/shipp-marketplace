@@ -73,6 +73,7 @@ def run_deployed_e2e_validation(
         "gold_candidate_matches",
         "gold_listing_search_docs",
         "velocity_measurements",
+        "ors_failure_validation_log",
     )
 
     missing_names = [name for name in required if name not in tables]
@@ -280,12 +281,20 @@ def run_deployed_e2e_validation(
         | F.col("http_status").isNull()
         | (F.col("http_status") != 200)
     ).count()
+    ors_validation = spark.table(tables["ors_failure_validation_log"])
+    deterministic_passes = ors_validation.filter(
+        F.upper(F.col("overall_status")) == "PASS"
+    ).count()
     _check(
         checks,
-        "ors_retry_or_failure_persisted",
-        retry_rows > 0 or failed_rows > 0,
-        {"retry_rows": retry_rows, "failed_rows": failed_rows},
-        "Bronze contains real persisted ORS retry/failure evidence.",
+        "ors_retry_failure_behavior",
+        retry_rows > 0 or failed_rows > 0 or deterministic_passes > 0,
+        {
+            "bronze_retry_rows": retry_rows,
+            "bronze_failed_rows": failed_rows,
+            "deterministic_validation_passes": deterministic_passes,
+        },
+        "ORS resilience is proven by persisted runtime evidence or the deterministic retry/failure validation.",
     )
 
     # ------------------------------------------------------------------

@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from shipp.agent.config import AgentSettings
-from shipp.agent.contracts import ActionStatus, SaveProposal, SaveResult
+from shipp.agent.contracts import ActionStatus, CandidateMatch, SaveProposal, SaveResult
 from shipp.agent.lakebase import SAVE_TOOL_NAME, LakebaseRepo
 from shipp.agent.llm import ChatModel
 from shipp.agent.prompts import SYSTEM_PROMPT
@@ -104,6 +104,36 @@ class ShippAgent:
                 build_lakebase_connect(settings, workspace),
                 settings.lakebase_schema,
             ),
+        )
+
+    def get_candidate_matches(
+        self,
+        *,
+        user_id: str,
+        request_id: str,
+    ) -> list[CandidateMatch]:
+        """Return trusted Gold candidates for an authorized request.
+
+        The App may filter or sort these rows for presentation, but eligibility
+        and scoring remain owned by the trusted Gold product.
+        """
+
+        request = self._lakebase.get_request(request_id)
+        refusal = check_request_usable(request, user_id)
+
+        if refusal is not None:
+            logger.warning(
+                "Candidate browse rejected for user_id=%s request_id=%s: %s",
+                user_id,
+                request_id,
+                refusal,
+            )
+            return []
+
+        return self._gold.get_candidate_matches(
+            request_id,
+            limit=self._settings.max_matches,
+            min_score=self._settings.min_match_score,
         )
 
     # ------------------------------------------------------------------

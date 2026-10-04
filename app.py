@@ -374,6 +374,7 @@ if persona == "Give an item":
         donors = marketplace.list_users("DONOR")
     except Exception:
         st.error("Donor profiles are temporarily unavailable.")
+        st.code(str(exc))
         st.stop()
 
     if not donors:
@@ -546,6 +547,7 @@ else:
         requesters = marketplace.list_users("REQUESTER")
     except Exception:
         st.error("Requester profiles are temporarily unavailable.")
+        st.code(str(exc))
         st.stop()
 
     if not requesters:

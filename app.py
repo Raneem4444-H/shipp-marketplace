@@ -146,6 +146,8 @@ defaults = {
     "last_saved_item_id": None,
     "last_saved_listing_id": None,
     "last_save_status": None,
+    "last_saved_refresh_pass": None,
+    "last_agent_read_tools": [],
     "donor_lat": 24.4976,
     "donor_lon": 54.4075,
     "requester_lat": 24.5014,
@@ -367,6 +369,13 @@ def render_deployment_evidence() -> None:
             if request:
                 st.code(f"request_id = {request['request_id']}")
 
+        if st.session_state.last_agent_read_tools:
+            st.markdown("**Last Agent READ:** PASS")
+            st.code(
+                "tools = "
+                + ", ".join(st.session_state.last_agent_read_tools)
+            )
+
         if st.session_state.last_save_status:
             st.markdown(
                 f"**Last Agent WRITE:** {st.session_state.last_save_status}"
@@ -377,6 +386,12 @@ def render_deployment_evidence() -> None:
                         [
                             f"saved_item_id = {st.session_state.last_saved_item_id}",
                             f"listing_id = {st.session_state.last_saved_listing_id}",
+                            "saved_state_refresh = "
+                            + (
+                                "PASS"
+                                if st.session_state.last_saved_refresh_pass
+                                else "FAIL"
+                            ),
                         ]
                     )
                 )
@@ -428,6 +443,18 @@ def run_agent_turn(
 
         st.session_state.pending_save = turn.pending_save
         st.session_state.tool_trace = turn.tool_trace
+        read_tool_names = {
+            "get_candidate_matches",
+            "search_listing_context",
+            "get_listing_status",
+        }
+        st.session_state.last_agent_read_tools = sorted(
+            {
+                str(trace.get("tool", ""))
+                for trace in turn.tool_trace
+                if str(trace.get("tool", "")) in read_tool_names
+            }
+        )
 
     except Exception as exc:
         st.session_state.messages.append(
@@ -1306,6 +1333,7 @@ else:
                                 result.saved_item_id is not None
                                 and str(result.saved_item_id) in saved_ids
                             )
+                            st.session_state.last_saved_refresh_pass = refresh_ok
 
                             if refresh_ok:
                                 st.success(

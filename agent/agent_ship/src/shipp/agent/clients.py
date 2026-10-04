@@ -33,8 +33,21 @@ _DEFAULT_DATABASE = "databricks_postgres"
 def build_workspace_client() -> Any:
     from databricks.sdk import WorkspaceClient
 
-    # Unified auth: notebook identity, local Databricks CLI auth, or the
-    # Databricks App service principal at deployment time.
+    # External Streamlit deployments use OAuth M2M explicitly when all three
+    # service-principal settings are present. This avoids ambiguous/default
+    # auth discovery in a runtime that has no Databricks CLI profile.
+    host = os.getenv("DATABRICKS_HOST")
+    client_id = os.getenv("DATABRICKS_CLIENT_ID")
+    client_secret = os.getenv("DATABRICKS_CLIENT_SECRET")
+
+    if host and client_id and client_secret:
+        return WorkspaceClient(
+            host=host,
+            client_id=client_id,
+            client_secret=client_secret,
+        )
+
+    # Databricks Apps/notebooks continue to use platform-injected unified auth.
     return WorkspaceClient()
 
 

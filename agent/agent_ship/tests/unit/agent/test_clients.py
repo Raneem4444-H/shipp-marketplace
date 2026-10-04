@@ -128,3 +128,31 @@ def test_instance_without_dns_fails_clearly(monkeypatch):
             settings(lakebase_instance="shipp-lb"),
             FakeWorkspace(dns=None),
         )
+
+
+
+def test_build_workspace_client_uses_explicit_oauth_m2m(monkeypatch):
+    monkeypatch.setenv("DATABRICKS_HOST", "https://dbc.example")
+    monkeypatch.setenv("DATABRICKS_CLIENT_ID", "client-id")
+    monkeypatch.setenv("DATABRICKS_CLIENT_SECRET", "client-secret")
+
+    captured = {}
+
+    class FakeWorkspaceClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(
+        "databricks.sdk.WorkspaceClient",
+        FakeWorkspaceClient,
+    )
+
+    from shipp.agent.clients import build_workspace_client
+
+    build_workspace_client()
+
+    assert captured == {
+        "host": "https://dbc.example",
+        "client_id": "client-id",
+        "client_secret": "client-secret",
+    }

@@ -77,6 +77,30 @@ BRONZE_LISTING_FILES_HISTORY = (
     f"{CATALOG}.{BRONZE_SCHEMA}.lb_listing_files_history"
 )
 
+# Raw Saved Item change history captured incrementally from Lakebase.
+#
+# Source:
+#   Lakebase shipp.saved_items
+#
+# Consumers:
+#   Stage 13 marketplace analytics
+#   gold_marketplace_metrics
+BRONZE_SAVED_ITEMS_HISTORY = (
+    f"{CATALOG}.{BRONZE_SCHEMA}.lb_saved_items_history"
+)
+
+# Raw Agent Activity change history captured incrementally from Lakebase.
+#
+# Source:
+#   Lakebase shipp.agent_activity
+#
+# Consumers:
+#   Stage 13 marketplace analytics
+#   gold_marketplace_metrics
+BRONZE_AGENT_ACTIVITY_HISTORY = (
+    f"{CATALOG}.{BRONZE_SCHEMA}.lb_agent_activity_history"
+)
+
 
 # -----------------------------------------------------------------------------
 # Third-party API enrichment
@@ -258,6 +282,11 @@ GOLD_LISTING_SEARCH_DOCS = (
 
 # Stage 13 marketplace analytics product.
 #
+# Canonical source families:
+#   BRONZE_SAVED_ITEMS_HISTORY
+#   BRONZE_AGENT_ACTIVITY_HISTORY
+#   GOLD_CANDIDATE_MATCHES
+#
 # Registration here defines the canonical target name only.
 #
 # It does NOT imply that the table has already been:
@@ -323,6 +352,10 @@ TABLES = {
     "bronze_listings_history": BRONZE_LISTINGS_HISTORY,
     "bronze_requests_history": BRONZE_REQUESTS_HISTORY,
     "bronze_listing_files_history": BRONZE_LISTING_FILES_HISTORY,
+
+    "bronze_saved_items_history": BRONZE_SAVED_ITEMS_HISTORY,
+    "bronze_agent_activity_history": BRONZE_AGENT_ACTIVITY_HISTORY,
+
     "bronze_route_responses": BRONZE_ROUTE_RESPONSES,
     "bronze_vision_responses": BRONZE_VISION_RESPONSES,
 

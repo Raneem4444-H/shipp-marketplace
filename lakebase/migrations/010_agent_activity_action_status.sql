@@ -27,8 +27,6 @@ BEGIN;
 
 SET search_path TO shipp;
 
--- Remove only CHECK constraints on agent_activity that reference action_status.
--- This avoids assuming an environment-specific constraint name.
 DO $$
 DECLARE
     constraint_row record;
@@ -65,7 +63,6 @@ ALTER TABLE shipp.agent_activity
     )
     NOT VALID;
 
--- Validate immediately only when historical rows are already canonical.
 DO $$
 DECLARE
     invalid_count bigint;
@@ -99,9 +96,6 @@ $$;
 
 COMMIT;
 
--- --------------------------------------------------------------------------
--- Verification
--- --------------------------------------------------------------------------
 SELECT
     conname,
     convalidated,
@@ -117,6 +111,6 @@ FROM shipp.agent_activity
 GROUP BY action_status
 ORDER BY action_status;
 
--- Rollback (if needed):
+-- Rollback:
 -- ALTER TABLE shipp.agent_activity
 --   DROP CONSTRAINT IF EXISTS ck_agent_activity_action_status;

@@ -1,14 +1,5 @@
-"""Shipp AI agent (BN: agent retrieval + save_item write, spec §5.6)."""
+"""SHIPP AI agent package.
 
-from shipp.agent.agent import AgentTurn, ShippAgent
-from shipp.agent.config import AgentSettings
-from shipp.agent.contracts import ActionStatus, SaveProposal, SaveResult
-
-__all__ = [
-    "ActionStatus",
-    "AgentSettings",
-    "AgentTurn",
-    "SaveProposal",
-    "SaveResult",
-    "ShippAgent",
-]
+Runtime code imports concrete modules directly to avoid eager package
+initialization and circular/re-entrant imports during application startup.
+"""

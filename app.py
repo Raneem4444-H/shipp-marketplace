@@ -3,6 +3,9 @@
 # P0 Marketplace + Agent Integration
 # ============================================================
 
+from __future__ import annotations
+
+import html
 from pathlib import Path
 import sys
 
@@ -10,11 +13,12 @@ import streamlit as st
 
 
 # ------------------------------------------------------------
-# Load existing SHIPP Agent package
+# Paths / existing SHIPP Agent package
 # ------------------------------------------------------------
 
 ROOT_DIR = Path(__file__).resolve().parent
 AGENT_SRC = ROOT_DIR / "agent" / "agent_ship" / "src"
+CSS_PATH = ROOT_DIR / "assets" / "shipp.css"
 
 if str(AGENT_SRC) not in sys.path:
     sys.path.insert(0, str(AGENT_SRC))
@@ -23,17 +27,55 @@ from shipp.agent.agent import ShippAgent
 
 
 # ------------------------------------------------------------
-# Page
+# Page + SHIPP visual system
 # ------------------------------------------------------------
 
 st.set_page_config(
     page_title="SHIPP",
     page_icon="📦",
     layout="wide",
+    initial_sidebar_state="collapsed",
 )
 
-st.title("SHIPP")
-st.caption("AI-assisted household marketplace")
+
+def load_css() -> None:
+    """Load the checked-in SHIPP stylesheet.
+
+    Failing to load CSS must never prevent the functional App from starting.
+    """
+    if not CSS_PATH.exists():
+        return
+
+    css = CSS_PATH.read_text(encoding="utf-8")
+    st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
+
+
+load_css()
+
+st.markdown(
+    """
+    <div class="shipp-header">
+      <div class="shipp-brand">
+        <span class="shipp-logo">◇</span>
+        <span class="shipp-brand-name">SHIPP</span>
+      </div>
+      <div class="shipp-header-status">
+        <span class="shipp-status-dot"></span>
+        Gold + AI Search + Lakebase
+      </div>
+    </div>
+
+    <section class="shipp-hero">
+      <div class="shipp-eyebrow">AI-assisted household marketplace</div>
+      <h1 class="shipp-hero-title">Find useful items before they go to waste.</h1>
+      <p class="shipp-hero-copy">
+        Select a request, ask SHIPP for the best available match, review the
+        evidence, and save the item only after you approve it.
+      </p>
+    </section>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 # ------------------------------------------------------------
@@ -41,13 +83,12 @@ st.caption("AI-assisted household marketplace")
 # ------------------------------------------------------------
 
 @st.cache_resource
-def load_agent():
+def load_agent() -> ShippAgent:
     return ShippAgent.from_env()
 
 
 try:
     agent = load_agent()
-
 except Exception as exc:
     st.error("SHIPP Agent could not start.")
     st.code(str(exc))
@@ -72,41 +113,66 @@ if "tool_trace" not in st.session_state:
 # Request context
 # ------------------------------------------------------------
 
-st.subheader("1. Select Request")
+st.markdown('<div class="shipp-section-title">1. Select Request</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="shipp-section-copy">'
+    "Use an existing SHIPP requester and request. The Agent will only recommend "
+    "listings that are valid candidates for that request."
+    "</div>",
+    unsafe_allow_html=True,
+)
 
-left, right = st.columns(2)
+with st.container(border=True):
+    left, right = st.columns(2)
 
-with left:
-    user_id = st.text_input(
-        "User ID",
-        placeholder="Example: demo-requester-001",
-    )
+    with left:
+        user_id = st.text_input(
+            "User ID",
+            placeholder="Example: demo-requester-001",
+            key="app_user_id",
+        )
 
-with right:
-    request_id = st.text_input(
-        "Request ID",
-        placeholder="Example: demo-request-001",
-    )
+    with right:
+        request_id = st.text_input(
+            "Request ID",
+            placeholder="Example: demo-request-001",
+            key="app_request_id",
+        )
+
+st.markdown(
+    """
+    <div class="shipp-ai-banner">
+      <span class="shipp-ai-icon">✦</span>
+      <span>
+        SHIPP grounds recommendations in Gold candidate matches, AI Search
+        context, and the current Lakebase listing state.
+      </span>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 # ------------------------------------------------------------
 # Agent conversation
 # ------------------------------------------------------------
 
-st.subheader("2. Ask SHIPP Agent")
+st.markdown('<div class="shipp-section-title">2. Ask SHIPP Agent</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="shipp-section-copy">'
+    "Ask for the best available item. SHIPP will compare candidates, enrich the "
+    "answer with listing context, and verify availability before recommending."
+    "</div>",
+    unsafe_allow_html=True,
+)
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-
-prompt = st.chat_input(
-    "Recommend the best available item for this request"
-)
-
+prompt = st.chat_input("Recommend the best available item for this request")
 
 if prompt:
-
     if not user_id:
         st.warning("Enter User ID.")
         st.stop()
@@ -115,7 +181,6 @@ if prompt:
         st.warning("Enter Request ID.")
         st.stop()
 
-    # Display user message
     st.session_state.messages.append(
         {
             "role": "user",
@@ -128,7 +193,6 @@ if prompt:
 
     try:
         with st.spinner("Checking SHIPP candidate matches..."):
-
             turn = agent.chat(
                 user_id=user_id,
                 request_id=request_id,
@@ -161,9 +225,7 @@ if prompt:
 # ------------------------------------------------------------
 
 if st.session_state.tool_trace:
-
-    with st.expander("Agent tool trace"):
-
+    with st.expander("Agent tool trace — Gold → AI Search → Lakebase"):
         for number, trace in enumerate(
             st.session_state.tool_trace,
             start=1,
@@ -181,26 +243,40 @@ if st.session_state.tool_trace:
 pending = st.session_state.pending_save
 
 if pending is not None:
+    st.markdown('<div class="shipp-section-title">3. Confirm Save</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="shipp-section-copy">'
+        "The Agent has prepared a recommendation. Saving is a separate, explicit "
+        "user-approved action and rechecks current Lakebase state."
+        "</div>",
+        unsafe_allow_html=True,
+    )
 
-    st.divider()
+    pending_title = html.escape(str(pending.title))
+    pending_listing_id = html.escape(str(pending.listing_id))
+    pending_reason = html.escape(str(pending.reason))
 
-    st.subheader("3. Confirm Save")
-
-    st.write("**Recommended item:**", pending.title)
-    st.write("**Listing ID:**", pending.listing_id)
-    st.write("**Reason:**", pending.reason)
+    st.markdown(
+        f"""
+        <div class="shipp-recommendation">
+          <span class="shipp-recommendation-label">Recommended match</span>
+          <div class="shipp-recommendation-title">{pending_title}</div>
+          <div class="shipp-recommendation-id">{pending_listing_id}</div>
+          <div class="shipp-reason">
+            <strong>Why it matches:</strong> {pending_reason}
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     if st.button(
-        "Confirm Save",
+        "♡  Save Match",
         type="primary",
         use_container_width=True,
     ):
-
         try:
-            with st.spinner(
-                "Checking current Lakebase state..."
-            ):
-
+            with st.spinner("Checking current Lakebase state..."):
                 result = agent.confirm_save(
                     user_id=user_id,
                     request_id=request_id,
@@ -208,33 +284,32 @@ if pending is not None:
                 )
 
             if result.ok:
-
                 st.success(
                     f"Item saved successfully. "
                     f"Saved Item ID: {result.saved_item_id}"
                 )
-
                 st.session_state.pending_save = None
 
             else:
-
                 st.warning(
                     f"Save rejected: {result.message}"
                 )
 
         except Exception as exc:
-
             st.error("Save failed.")
             st.code(str(exc))
 
 
 # ------------------------------------------------------------
-# Architecture status
+# Architecture / trust statement
 # ------------------------------------------------------------
 
-st.divider()
-
-st.caption(
-    "Gold Candidate Matches → AI Search → SHIPP Agent → "
-    "User Confirmation → Lakebase"
+st.markdown(
+    """
+    <div class="shipp-footer">
+      Gold Candidate Matches → AI Search → SHIPP Agent →
+      User Confirmation → Lakebase
+    </div>
+    """,
+    unsafe_allow_html=True,
 )

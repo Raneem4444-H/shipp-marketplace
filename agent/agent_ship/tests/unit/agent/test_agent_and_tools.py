@@ -48,7 +48,7 @@ def test_status_check_on_non_candidate_is_rejected_and_logged():
     box, lake, _ = make_toolbox([match("l1")])
     out = box.dispatch("get_listing_status", json.dumps({"listing_id": "made-up"}))
     assert "error" in out
-    assert lake.activity[-1][3] is ActionStatus.REJECTED
+    assert lake.activity[-1][3] is ActionStatus.REJECTED_NOT_A_MATCH
 
 
 def test_search_is_restricted_to_candidate_ids():
@@ -84,7 +84,7 @@ def test_backend_failure_returns_safe_error_and_logs_failed():
     box, lake, _ = make_toolbox([match("l1")], fail_gold=True)
     out = box.dispatch("get_candidate_matches", "{}")
     assert "error" in out
-    assert lake.activity[-1][3] is ActionStatus.FAILED
+    assert lake.activity[-1][3] is ActionStatus.ERROR
 
 
 # ---------------------------------------------------------------- agent loop
@@ -134,7 +134,7 @@ def test_confirm_save_success_then_duplicate():
     first = agent.confirm_save(user_id="user-1", request_id="req-1", listing_id="l1")
     second = agent.confirm_save(user_id="user-1", request_id="req-1", listing_id="l1")
     assert first.ok
-    assert second.status is ActionStatus.DUPLICATE
+    assert second.status is ActionStatus.REJECTED_DUPLICATE
     assert len(lake.saved) == 1
 
 

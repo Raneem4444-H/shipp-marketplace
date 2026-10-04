@@ -180,6 +180,10 @@ VISION_STATUSES = (
 SEARCH_DEFAULT_K = 5
 SEARCH_MAX_K = 10
 
+# Optional semantic-scoring (Gold v2) retrieval depth per Request.
+# Kept separate from Gold v1; Notebook 56 is the only current consumer.
+SEMANTIC_TOP_K_PER_REQUEST = 5
+
 SEARCH_MAX_QUERY_CHARS = 500
 SEARCH_SNIPPET_CHARS = 400
 

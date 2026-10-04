@@ -46,6 +46,10 @@ class AgentSettings:
     candidate_matches_table: str
     search_index: str
     lakebase_schema: str
+    # Lakebase Autoscaling endpoint resource path, for example:
+    # projects/<project>/branches/<branch>/endpoints/<endpoint>.
+    lakebase_endpoint: str | None = None
+    # Legacy/Provisioned Lakebase instance name. Kept for notebook/local fallback.
     lakebase_instance: str | None = None
     max_matches: int = 5
     max_search_results: int = 5
@@ -66,7 +70,7 @@ class AgentSettings:
             raise ValueError("min_match_score must be between 0 and 1")
 
     @classmethod
-    def from_env(cls) -> AgentSettings:
+    def from_env(cls) -> "AgentSettings":
         return cls(
             llm_endpoint=_require("SHIPP_LLM_ENDPOINT"),
             sql_warehouse_id=_require("SHIPP_SQL_WAREHOUSE_ID"),
@@ -77,6 +81,10 @@ class AgentSettings:
                 "SHIPP_SEARCH_INDEX", "shipp.gold.gold_listing_search_docs_index"
             ),
             lakebase_schema=os.getenv("SHIPP_LAKEBASE_SCHEMA", "bootcamp_shipp"),
+            lakebase_endpoint=(
+                os.getenv("SHIPP_LAKEBASE_ENDPOINT")
+                or os.getenv("ENDPOINT_NAME")
+            ),
             lakebase_instance=os.getenv("SHIPP_LAKEBASE_INSTANCE"),
             max_matches=int(os.getenv("SHIPP_AGENT_MAX_MATCHES", "5")),
             max_search_results=int(os.getenv("SHIPP_AGENT_MAX_SEARCH_RESULTS", "5")),

@@ -578,3 +578,17 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+# TEMP — identify the Lakebase PostgreSQL identity used by the App
+try:
+    with marketplace._connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT current_user, session_user")
+            identity = cur.fetchone()
+
+    st.info(
+        f"Lakebase identity: current_user={identity[0]}, "
+        f"session_user={identity[1]}"
+    )
+except Exception as exc:
+    st.warning("Could not inspect Lakebase runtime identity.")
+    st.code(str(exc))

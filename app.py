@@ -98,29 +98,10 @@ def load_agent() -> ShippAgent:
 
 
 @st.cache_resource
-@st.cache_resource
 def load_marketplace() -> MarketplaceRepo:
     settings = AgentSettings.from_env()
     workspace = build_workspace_client()
     connect = build_lakebase_connect(settings, workspace)
-
-    # TEMP DEBUG: identify Lakebase/PostgreSQL role
-    conn = connect() if callable(connect) else connect
-
-    with conn.cursor() as cur:
-        cur.execute("""
-            SELECT
-                current_user,
-                session_user,
-                current_database()
-        """)
-        current_user, session_user, database_name = cur.fetchone()
-
-    st.info(
-        f"Lakebase current_user: {current_user}\n\n"
-        f"Lakebase session_user: {session_user}\n\n"
-        f"Database: {database_name}"
-    )
 
     return MarketplaceRepo(
         connect,
@@ -162,6 +143,9 @@ defaults = {
     "active_requester_id": None,
     "last_created_listing_id": None,
     "last_created_request_id": None,
+    "last_saved_item_id": None,
+    "last_saved_listing_id": None,
+    "last_save_status": None,
     "donor_lat": 24.4976,
     "donor_lon": 54.4075,
     "requester_lat": 24.5014,
@@ -241,6 +225,161 @@ def location_picker(
         float(st.session_state[lat_key]),
         float(st.session_state[lon_key]),
     )
+
+
+def render_listing_gallery(
+    listings: list[dict],
+    *,
+    empty_message: str,
+    key_prefix: str,
+) -> None:
+    """Render operational Lakebase listings with photo + description.
+
+    This gallery is for marketplace discovery and donor confirmation.
+    Request-specific recommendation eligibility still comes from Gold.
+    """
+
+    if not listings:
+        st.info(empty_message)
+        return
+
+    columns = st.columns(3)
+
+    for index, listing in enumerate(listings):
+        listing_id = str(listing["listing_id"])
+
+        with columns[index % 3]:
+            with st.container(border=True):
+                image_bytes = load_listing_image(marketplace, listing_id)
+
+                if image_bytes:
+                    st.image(image_bytes, use_container_width=True)
+                else:
+                    st.markdown(
+                        '<div class="listing-image-placeholder">'
+                        '<span>Photo processing</span>'
+                        '</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                category = str(listing.get("category") or "Other").replace("_", " ").title()
+                condition = str(
+                    listing.get("condition") or "Condition not specified"
+                ).replace("_", " ").title()
+                location = str(listing.get("location") or "Location not specified")
+                title = str(listing.get("title") or "Untitled item")
+                description = str(
+                    listing.get("description") or "No description provided."
+                ).strip()
+
+                st.markdown(
+                    f"""
+                    <div class="listing-card-copy">
+                      <div class="product-card-top">
+                        <span class="product-category">{html.escape(category)}</span>
+                        <span class="listing-live-badge">Live</span>
+                      </div>
+                      <h3 class="product-title">{html.escape(title)}</h3>
+                      <div class="product-area">{html.escape(location)}</div>
+                      <p class="listing-description">{html.escape(description)}</p>
+                      <div class="product-meta">
+                        <span>{html.escape(condition)}</span>
+                        <span>Available now</span>
+                      </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                with st.expander("Listing details", expanded=False):
+                    st.caption(
+                        "Operational listing from Lakebase. Matching and ranking "
+                        "for a requester are produced separately by trusted Gold."
+                    )
+                    st.code(f"listing_id = {listing_id}")
+
+
+def render_deployment_evidence() -> None:
+    """Render non-secret deployed-runtime proof without changing business state."""
+
+    with st.expander("Deployment & permissions evidence", expanded=False):
+        st.caption(
+            "This check uses the same Lakebase connection as the running App. "
+            "It never prints passwords, OAuth tokens, or secret values."
+        )
+
+        try:
+            evidence = marketplace.runtime_identity_permissions()
+        except Exception as exc:
+            st.error("FAIL — deployed App cannot validate its Lakebase runtime identity.")
+            st.code(str(exc))
+            return
+
+        status = "PASS" if evidence["all_required"] else "FAIL"
+        st.markdown(f"**{status} — Lakebase runtime identity and required grants**")
+
+        e1, e2, e3 = st.columns(3)
+        e1.metric("Schema USAGE", "PASS" if evidence["schema_usage"] else "FAIL")
+        e2.metric(
+            "Required table grants",
+            "PASS" if all(evidence["privileges"].values()) else "FAIL",
+        )
+        e3.metric("Runtime database", str(evidence["database"]))
+
+        st.code(
+            "\n".join(
+                [
+                    f"current_user = {evidence['current_user']}",
+                    f"session_user = {evidence['session_user']}",
+                    f"database = {evidence['database']}",
+                ]
+            )
+        )
+
+        privilege_rows = [
+            {
+                "object_privilege": name,
+                "status": "PASS" if ok else "FAIL",
+            }
+            for name, ok in evidence["privileges"].items()
+        ]
+        st.dataframe(privilege_rows, use_container_width=True, hide_index=True)
+
+        if st.session_state.last_created_listing_id:
+            listing = marketplace.get_listing_record(
+                st.session_state.last_created_listing_id
+            )
+            st.markdown(
+                "**Live donor listing write/readback:** "
+                + ("PASS" if listing else "FAIL")
+            )
+            if listing:
+                st.code(f"listing_id = {listing['listing_id']}")
+
+        if st.session_state.last_created_request_id:
+            request = marketplace.get_request_record(
+                st.session_state.last_created_request_id
+            )
+            st.markdown(
+                "**Live requester request write/readback:** "
+                + ("PASS" if request else "FAIL")
+            )
+            if request:
+                st.code(f"request_id = {request['request_id']}")
+
+        if st.session_state.last_save_status:
+            st.markdown(
+                f"**Last Agent WRITE:** {st.session_state.last_save_status}"
+            )
+            if st.session_state.last_saved_item_id:
+                st.code(
+                    "\n".join(
+                        [
+                            f"saved_item_id = {st.session_state.last_saved_item_id}",
+                            f"listing_id = {st.session_state.last_saved_listing_id}",
+                        ]
+                    )
+                )
 
 
 def reset_request_session(request_id: str, requester_id: str) -> None:
@@ -380,6 +519,8 @@ persona = st.radio(
     label_visibility="collapsed",
 )
 
+render_deployment_evidence()
+
 
 # ============================================================
 # DONOR JOURNEY
@@ -415,6 +556,26 @@ if persona == "Give an item":
     )
     donor_id = donor_by_label[donor_label]
 
+    st.markdown("#### Your live listings")
+    st.caption(
+        "These are the items this donor has already published. Photos and "
+        "descriptions are read from the operational marketplace."
+    )
+    try:
+        donor_listings = marketplace.list_available_listings(
+            donor_id=donor_id,
+            limit=9,
+        )
+        render_listing_gallery(
+            donor_listings,
+            empty_message="No live listings yet — publish the first item below.",
+            key_prefix="donor_live",
+        )
+    except Exception as exc:
+        st.warning("Live donor listings are temporarily unavailable.")
+        st.code(str(exc))
+
+    st.markdown("---")
     st.markdown("#### 1. Add photos")
     uploaded_files = st.file_uploader(
         "Upload item photos",
@@ -546,6 +707,19 @@ if persona == "Give an item":
                         "listing image Volume before the final demo."
                     )
 
+                persisted_listing = marketplace.get_listing_record(listing_id)
+                if persisted_listing is None:
+                    st.error(
+                        "The listing write returned an ID but Lakebase readback failed."
+                    )
+                else:
+                    st.success("Lakebase confirmed the published listing.")
+                    render_listing_gallery(
+                        [persisted_listing],
+                        empty_message="",
+                        key_prefix="published",
+                    )
+
                 st.caption(
                     "SHIPP will use the existing incremental pipeline to make "
                     "the listing available for trusted matching."
@@ -589,6 +763,25 @@ else:
         key="requester_profile",
     )
     requester_id = requester_by_label[requester_label]
+
+    st.markdown("#### Marketplace")
+    st.caption(
+        "Browse current donor listings with real photos and descriptions. "
+        "For your request, SHIPP will only recommend items that pass the "
+        "trusted Gold matching pipeline."
+    )
+    try:
+        live_listings = marketplace.list_available_listings(limit=12)
+        render_listing_gallery(
+            live_listings,
+            empty_message="No donor listings are currently available.",
+            key_prefix="marketplace",
+        )
+    except Exception as exc:
+        st.warning("Marketplace listings are temporarily unavailable.")
+        st.code(str(exc))
+
+    st.markdown("---")
 
     request_mode = st.radio(
         "Your need",
@@ -664,7 +857,16 @@ else:
                     selected_request_id = new_request_id
                     selected_request_summary = request_text.strip()
                     reset_request_session(new_request_id, requester_id)
-                    st.success("Your request was created.")
+                    persisted_request = marketplace.get_request_record(new_request_id)
+                    if persisted_request is None:
+                        st.error(
+                            "The request write returned an ID but Lakebase readback failed."
+                        )
+                    else:
+                        st.success("Your request was created and confirmed in Lakebase.")
+                        with st.expander("Technical request evidence", expanded=False):
+                            st.code(f"request_id = {new_request_id}")
+
                     st.caption(
                         "New requests become browsable after the existing SHIPP "
                         "incremental pipeline refreshes trusted Gold matches."
@@ -1087,16 +1289,50 @@ else:
 
                         if result.ok:
                             st.session_state.pending_save = None
-                            st.success("Item saved successfully.")
+                            st.session_state.last_saved_item_id = result.saved_item_id
+                            st.session_state.last_saved_listing_id = pending.listing_id
+                            st.session_state.last_save_status = "PASS"
+                            st.cache_data.clear()
+
+                            saved_after = marketplace.list_saved_items(
+                                user_id,
+                                request_id,
+                            )
+                            saved_ids = {
+                                str(row["saved_item_id"])
+                                for row in saved_after
+                            }
+                            refresh_ok = (
+                                result.saved_item_id is not None
+                                and str(result.saved_item_id) in saved_ids
+                            )
+
+                            if refresh_ok:
+                                st.success(
+                                    "Item saved and the refreshed Saved state "
+                                    "was confirmed from Lakebase."
+                                )
+                            else:
+                                st.error(
+                                    "The Agent reported success, but the refreshed "
+                                    "Saved state could not confirm the row."
+                                )
 
                             with st.expander(
                                 "Technical save evidence",
                                 expanded=False,
                             ):
                                 st.code(
-                                    f"saved_item_id = {result.saved_item_id}"
+                                    "\n".join(
+                                        [
+                                            f"saved_item_id = {result.saved_item_id}",
+                                            f"listing_id = {pending.listing_id}",
+                                            f"saved_state_refresh = {'PASS' if refresh_ok else 'FAIL'}",
+                                        ]
+                                    )
                                 )
                         else:
+                            st.session_state.last_save_status = f"REJECTED — {result.status.value}"
                             st.warning(
                                 "SHIPP rechecked the current listing state and "
                                 f"did not save the item: {result.message}"
@@ -1109,10 +1345,29 @@ else:
                         st.code(str(exc))
 
         if st.session_state.tool_trace:
+            tool_names = [
+                str(trace.get("tool", "unknown"))
+                for trace in st.session_state.tool_trace
+            ]
+            read_tools = {
+                "get_candidate_matches",
+                "search_listing_context",
+                "get_listing_status",
+            }
+            exercised = sorted(read_tools.intersection(tool_names))
+
             with st.expander(
                 "How SHIPP produced this recommendation",
                 expanded=False,
             ):
+                st.caption(
+                    "Agent READ evidence: "
+                    + (
+                        "PASS — " + ", ".join(exercised)
+                        if exercised
+                        else "No read tool captured in the latest turn."
+                    )
+                )
                 st.caption(
                     "Evidence path: trusted Gold candidates → semantic context "
                     "→ current operational listing state."

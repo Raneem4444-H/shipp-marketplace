@@ -1,6 +1,7 @@
 # SHIPP Marketplace
 
 **Databricks Data Engineering + AI Capstone**
+Team Work Capstone Project : Abdulrahman and Raneem 
 
 SHIPP is a two-sided household-item marketplace connecting people who have
 useful household items with people who need them.

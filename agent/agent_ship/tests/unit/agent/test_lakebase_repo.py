@@ -100,15 +100,15 @@ def test_withdrawn_listing_rejected_and_audited():
     db = FakeDB()
     db.listings["l1"] = ("l1", "withdrawn", None)
     result = repo(db).save_item(user_id="user-1", request_id="req-1", listing_id="l1", now=NOW)
-    assert result.status is ActionStatus.REJECTED
+    assert result.status is ActionStatus.REJECTED_UNAVAILABLE
     assert db.saved == {}
-    assert db.activity == [("save_item", "l1", "rejected")]
+    assert db.activity == [("save_item", "l1", "REJECTED_UNAVAILABLE")]
 
 
 def test_wrong_owner_never_reads_listing():
     db = FakeDB()
     result = repo(db).save_item(user_id="intruder", request_id="req-1", listing_id="l1", now=NOW)
-    assert result.status is ActionStatus.REJECTED
+    assert result.status is ActionStatus.REJECTED_NOT_OWNER
     assert not any("FROM bootcamp_shipp.listings" in s for s in db.statements)
 
 
@@ -116,6 +116,6 @@ def test_db_error_rolls_back_and_logs_failure_separately():
     db = FakeDB()
     db.fail_on_insert_saved = True
     result = repo(db).save_item(user_id="user-1", request_id="req-1", listing_id="l1", now=NOW)
-    assert result.status is ActionStatus.FAILED
+    assert result.status is ActionStatus.ERROR
     assert db.saved == {}
-    assert db.activity == [("save_item", "l1", "failed")]
+    assert db.activity == [("save_item", "l1", "ERROR")]

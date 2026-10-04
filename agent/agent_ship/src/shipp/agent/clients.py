@@ -1,18 +1,17 @@
-"""Factories for real platform clients. Imports are lazy so unit tests and CI
-don't need databricks-sdk, psycopg, or openai installed.
+"""Factories for real platform clients.
 
 Lakebase connection details come from one of two places:
 
-1. Databricks App with a Lakebase database resource attached:
-   PGHOST, PGPORT, PGDATABASE and PGUSER are injected automatically.
-2. Anywhere else (notebooks, jobs, local dev): those variables do NOT exist.
-   They are resolved from the instance through the SDK instead:
-     host     <- database instance read_write_dns
-     user     <- the current Databricks identity
-     database <- SHIPP_LAKEBASE_DATABASE (default databricks_postgres)
+1. Databricks App with a Lakebase Autoscaling database resource attached:
+   PGHOST, PGPORT, PGDATABASE and PGUSER are injected automatically, while
+   SHIPP_LAKEBASE_ENDPOINT (from valueFrom: postgres) carries the endpoint path
+   required to mint short-lived database credentials.
+2. Notebook/local fallback:
+   SHIPP_LAKEBASE_INSTANCE can still resolve a legacy/provisioned target.
 
-In both cases the password is a short-lived OAuth token, unless PGPASSWORD is
-set explicitly for local development.
+No database password is stored in code. Databricks Apps use the app service
+principal through WorkspaceClient unified auth and mint a short-lived Lakebase
+OAuth credential for the configured endpoint.
 """
 
 from __future__ import annotations
@@ -34,15 +33,20 @@ _DEFAULT_DATABASE = "databricks_postgres"
 def build_workspace_client() -> Any:
     from databricks.sdk import WorkspaceClient
 
-    # Unified auth: notebook identity, `databricks configure` locally, the app's service principal in Apps.
+    # Unified auth: notebook identity, local Databricks CLI auth, or the
+    # Databricks App service principal at deployment time.
     return WorkspaceClient()
 
 
-def resolve_pg_target(settings: AgentSettings, workspace_client: Any) -> tuple[str, str, str]:
+def resolve_pg_target(
+    settings: AgentSettings,
+    workspace_client: Any,
+) -> tuple[str, str, str]:
     """Return (host, user, database) for the Lakebase connection.
 
-    Uses the App-injected PG* variables when present; otherwise resolves each
-    missing value from the Lakebase instance and the current identity.
+    Databricks Apps inject PG* variables for an attached Lakebase resource.
+    Outside an App, missing values can be resolved from a legacy/provisioned
+    Lakebase instance through the SDK.
     """
     host = os.getenv("PGHOST")
     user = os.getenv("PGUSER")
@@ -51,15 +55,18 @@ def resolve_pg_target(settings: AgentSettings, workspace_client: Any) -> tuple[s
     if not host:
         if not settings.lakebase_instance:
             raise RuntimeError(
-                "No PGHOST and no SHIPP_LAKEBASE_INSTANCE. Outside a Databricks App, set "
-                "SHIPP_LAKEBASE_INSTANCE (and SHIPP_LAKEBASE_DATABASE) so the host can be resolved."
+                "No PGHOST and no SHIPP_LAKEBASE_INSTANCE. In a Databricks App, "
+                "attach the Lakebase database resource. Outside an App, set "
+                "SHIPP_LAKEBASE_INSTANCE (and optionally SHIPP_LAKEBASE_DATABASE)."
             )
-        instance = workspace_client.database.get_database_instance(name=settings.lakebase_instance)
+        instance = workspace_client.database.get_database_instance(
+            name=settings.lakebase_instance
+        )
         host = instance.read_write_dns
         if not host:
             raise RuntimeError(
-                f"Lakebase instance '{settings.lakebase_instance}' returned no read_write_dns "
-                "(is it AVAILABLE?)."
+                f"Lakebase instance '{settings.lakebase_instance}' returned no "
+                "read_write_dns (is it AVAILABLE?)."
             )
 
     if not user:
@@ -68,8 +75,42 @@ def resolve_pg_target(settings: AgentSettings, workspace_client: Any) -> tuple[s
     return host, user, database or _DEFAULT_DATABASE
 
 
-def build_lakebase_connect(settings: AgentSettings, workspace_client: Any) -> Callable[[], Any]:
-    """Return a zero-arg callable that opens a psycopg 3 connection to Lakebase."""
+def _generate_database_token(
+    settings: AgentSettings,
+    workspace_client: Any,
+) -> str:
+    """Mint a short-lived Lakebase database credential.
+
+    Autoscaling uses the endpoint path exposed by the Databricks App resource.
+    The legacy instance path remains only as a backward-compatible fallback for
+    existing notebook/local workflows.
+    """
+    if settings.lakebase_endpoint:
+        credential = workspace_client.postgres.generate_database_credential(
+            endpoint=settings.lakebase_endpoint
+        )
+        return credential.token
+
+    if settings.lakebase_instance:
+        credential = workspace_client.database.generate_database_credential(
+            request_id=str(uuid4()),
+            instance_names=[settings.lakebase_instance],
+        )
+        return credential.token
+
+    raise RuntimeError(
+        "Lakebase OAuth credential cannot be generated: no "
+        "SHIPP_LAKEBASE_ENDPOINT or SHIPP_LAKEBASE_INSTANCE is configured. "
+        "For Databricks Apps, bind SHIPP_LAKEBASE_ENDPOINT with "
+        "valueFrom: postgres."
+    )
+
+
+def build_lakebase_connect(
+    settings: AgentSettings,
+    workspace_client: Any,
+) -> Callable[[], Any]:
+    """Return a zero-arg callable that opens a psycopg 3 Lakebase connection."""
     import psycopg
 
     host, user, database = resolve_pg_target(settings, workspace_client)
@@ -81,19 +122,17 @@ def build_lakebase_connect(settings: AgentSettings, workspace_client: Any) -> Ca
         static = os.getenv("PGPASSWORD")
         if static:
             return static
-        if not settings.lakebase_instance:
-            raise RuntimeError(
-                "No PGPASSWORD and no SHIPP_LAKEBASE_INSTANCE: cannot generate a Lakebase OAuth token."
-            )
+
         with lock:
             if cache["token"] and time.monotonic() < cache["expires_at"]:
                 return cache["token"]
-            cred = workspace_client.database.generate_database_credential(
-                request_id=str(uuid4()),
-                instance_names=[settings.lakebase_instance],
+
+            token = _generate_database_token(settings, workspace_client)
+            cache.update(
+                token=token,
+                expires_at=time.monotonic() + _TOKEN_TTL_SECONDS,
             )
-            cache.update(token=cred.token, expires_at=time.monotonic() + _TOKEN_TTL_SECONDS)
-            return cred.token
+            return token
 
     def connect() -> Any:
         return psycopg.connect(

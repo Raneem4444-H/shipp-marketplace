@@ -102,16 +102,40 @@ class FakeLakebase:
 
     def save_item(self, *, user_id, request_id, listing_id, now=None):
         now = now or datetime.now(timezone.utc)
-        reason = check_request_usable(self.requests.get(request_id), user_id) or (
-            check_listing_saveable(self.listings.get(listing_id), now)
-        )
-        if reason:
-            self.log_activity(user_id, "save_item", listing_id, ActionStatus.REJECTED)
-            return SaveResult(ActionStatus.REJECTED, reason)
+
+        request = self.requests.get(request_id)
+        request_reason = check_request_usable(request, user_id)
+        if request_reason:
+            if request is None:
+                status = ActionStatus.NOT_FOUND
+            elif request.requester_id != user_id:
+                status = ActionStatus.REJECTED_NOT_OWNER
+            else:
+                status = ActionStatus.REJECTED_REQUEST_CLOSED
+            self.log_activity(user_id, "save_item", listing_id, status)
+            return SaveResult(status, request_reason)
+
+        listing = self.listings.get(listing_id)
+        listing_reason = check_listing_saveable(listing, now)
+        if listing_reason:
+            status = (
+                ActionStatus.NOT_FOUND
+                if listing is None
+                else ActionStatus.REJECTED_UNAVAILABLE
+            )
+            self.log_activity(user_id, "save_item", listing_id, status)
+            return SaveResult(status, listing_reason)
+
         key = (user_id, request_id, listing_id)
         if key in self.saved:
-            self.log_activity(user_id, "save_item", listing_id, ActionStatus.DUPLICATE)
-            return SaveResult(ActionStatus.DUPLICATE, "dup")
+            self.log_activity(
+                user_id,
+                "save_item",
+                listing_id,
+                ActionStatus.REJECTED_DUPLICATE,
+            )
+            return SaveResult(ActionStatus.REJECTED_DUPLICATE, "dup")
+
         self.saved.add(key)
         self.log_activity(user_id, "save_item", listing_id, ActionStatus.SUCCESS)
         return SaveResult(ActionStatus.SUCCESS, "Item saved.", "saved-1")

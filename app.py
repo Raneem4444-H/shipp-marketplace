@@ -29,6 +29,11 @@ if str(AGENT_SRC) not in sys.path:
     sys.path.insert(0, str(AGENT_SRC))
 
 from app_marketplace import MarketplaceRepo
+from app_runtime import (
+    bootstrap_streamlit_secrets,
+    deployment_target,
+    runtime_config_status,
+)
 from shipp.agent.agent import ShippAgent
 from shipp.agent.clients import build_lakebase_connect, build_workspace_client
 
@@ -43,6 +48,20 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+
+# Streamlit Community Cloud stores configuration in st.secrets rather than
+# Databricks App resource bindings. Root-level secrets are already exposed by
+# Streamlit; this additionally supports clean [databricks]/[lakebase]/[shipp]
+# sections without printing any secret values.
+try:
+    bootstrap_streamlit_secrets(st.secrets)
+except Exception:
+    # No secrets file is a valid state for Databricks Apps because resources
+    # are injected by the platform. Startup checks below surface real gaps.
+    pass
+
+RUNTIME_STATUS = runtime_config_status()
+DEPLOYMENT_TARGET = deployment_target()
 
 
 def load_css() -> None:
@@ -328,10 +347,44 @@ def render_deployment_evidence() -> None:
     """Render non-secret deployed-runtime proof without changing business state."""
 
     with st.expander("Deployment & permissions evidence", expanded=False):
-        st.caption(
-            "This check uses the same Lakebase connection as the running App. "
-            "It never prints passwords, OAuth tokens, or secret values."
+        target_label = (
+            "Databricks App"
+            if DEPLOYMENT_TARGET == "databricks_app"
+            else "Streamlit Cloud / external Streamlit"
         )
+        st.caption(
+            f"Runtime target: {target_label}. This check uses the same Lakebase "
+            "connection as the running application and never prints passwords, "
+            "OAuth tokens, API keys, or secret values."
+        )
+
+        config = RUNTIME_STATUS
+        cfg1, cfg2, cfg3 = st.columns(3)
+        cfg1.metric(
+            "Marketplace config",
+            "PASS" if config["marketplace_ready"] else "CHECK",
+        )
+        cfg2.metric(
+            "AI Agent config",
+            "PASS" if config["agent_ready"] else "CHECK",
+        )
+        cfg3.metric(
+            "Deployment target",
+            "Databricks App"
+            if DEPLOYMENT_TARGET == "databricks_app"
+            else "Streamlit Cloud",
+        )
+
+        if config["marketplace_missing"]:
+            st.warning(
+                "Missing marketplace configuration names: "
+                + ", ".join(config["marketplace_missing"])
+            )
+        if config["agent_missing"]:
+            st.info(
+                "Missing AI configuration names: "
+                + ", ".join(config["agent_missing"])
+            )
 
         try:
             evidence = marketplace.runtime_identity_permissions()

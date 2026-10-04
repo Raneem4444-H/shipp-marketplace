@@ -296,3 +296,76 @@ Donor creates Listing                         Requester creates Request
                     Analytics / App Feedback
         
 ```
+
+---
+
+## Final execution contracts
+
+These contracts define the **current implemented SHIPP submission path**. They are intentionally narrow so the final capstone validation does not reintroduce duplicate implementations or silently change already-validated behavior.
+
+### Databricks App deployment source
+
+The canonical Databricks App source is the **repository root**:
+
+```text
+app.py
+app.yaml
+requirements.txt
+assets/
+agent/
+```
+
+The historical `app/` subdirectory is a legacy scaffold and is **not** the final deployment source. Before the final deployment, verify that the Databricks App source points to the repository root.
+
+### Canonical analytics writer
+
+The validated Stage 13 analytics path is:
+
+```text
+notebooks/development/60_gold_marketplace_metrics.ipynb
+```
+
+For the final submission, this notebook/job is the canonical writer of:
+
+```text
+bootcamp_students.shipp_gold.gold_marketplace_metrics
+```
+
+Do not run a competing writer against the same Gold product during final validation.
+
+### Current Gold v1 scoring contract
+
+The implemented and validated Gold v1 ranking contract is the deterministic structured score defined in `config/settings.py` and `data_pipeline/gold/scoring.py`:
+
+```text
+match_score
+= 0.50 * distance_score
++ 0.30 * timing_score
++ 0.20 * condition_score
+```
+
+Category compatibility, request/listing status, availability, and other hard business constraints are applied **before scoring** as eligibility filters.
+
+The original proposal described a broader conceptual score containing category, availability, route, and semantic relevance. The implemented v1 intentionally keeps semantic retrieval in the AI Search / Agent context path rather than changing the validated Gold ranking formula.
+
+Changing this scoring contract is outside final-validation scope unless a verified grading blocker requires it and both Raneem and AbdulRahman approve the change.
+
+### Final validation order
+
+```text
+Databricks App deployment
+→ managed-resource / service-principal permissions
+→ Agent READ
+→ AI Search evidence
+→ deployed request → recommend → save
+→ Lakebase confirmation
+→ agent_activity confirmation
+→ Saved Items + Agent Activity CDC
+→ canonical Analytics update
+→ App saved-state confirmation
+→ Velocity + Security evidence
+→ final screenshots/logs
+→ README/demo freeze
+```
+
+The final evidence must come from the submitted implementation. Documentation is not a substitute for runtime validation.

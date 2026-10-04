@@ -143,14 +143,127 @@ def load_marketplace() -> MarketplaceRepo:
     )
 
 
+def render_startup_blocker(exc: Exception) -> None:
+    """Render an actionable deployment blocker instead of a blank/error page."""
+
+    target = (
+        "Databricks App"
+        if DEPLOYMENT_TARGET == "databricks_app"
+        else "Streamlit Community Cloud"
+    )
+
+    st.markdown(
+        """
+        <div class="shipp-header">
+          <div class="shipp-brand">
+            <span class="shipp-logo">◇</span>
+            <div>
+              <div class="shipp-brand-name">SHIPP</div>
+              <div class="shipp-tagline">Household items, matched intelligently.</div>
+            </div>
+          </div>
+          <div class="shipp-status shipp-status-offline">
+            <span class="shipp-status-dot shipp-status-dot-offline"></span>
+            Setup required
+          </div>
+        </div>
+
+        <section class="shipp-hero">
+          <div class="shipp-eyebrow">Deployment setup</div>
+          <h1>SHIPP is deployed, but its data connection is not ready.</h1>
+          <p>
+            The frontend loaded successfully. The remaining blocker is the
+            runtime connection to Databricks/Lakebase for this deployment.
+          </p>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.error(
+        "The application cannot open the SHIPP marketplace database yet. "
+        "No business data was changed."
+    )
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Runtime", target)
+    c2.metric(
+        "Marketplace config",
+        "PASS" if RUNTIME_STATUS["marketplace_ready"] else "CHECK",
+    )
+    c3.metric(
+        "AI Agent config",
+        "PASS" if RUNTIME_STATUS["agent_ready"] else "CHECK",
+    )
+
+    missing = list(RUNTIME_STATUS["marketplace_missing"])
+    if missing:
+        st.markdown("### Missing deployment configuration")
+        st.code("\n".join(missing))
+        st.caption(
+            "Add these names in Streamlit Community Cloud → App settings → Secrets. "
+            "Do not put secret values in GitHub."
+        )
+
+    error_text = str(exc)
+    with st.expander("Connection diagnostic", expanded=True):
+        if "No PGHOST and no SHIPP_LAKEBASE_INSTANCE" in error_text:
+            st.warning(
+                "Lakebase host/instance is not configured for this external app."
+            )
+        elif "default auth" in error_text.lower() or "credential" in error_text.lower():
+            st.warning(
+                "Databricks authentication is incomplete or the configured "
+                "service principal cannot mint a Lakebase credential."
+            )
+        elif "timeout" in error_text.lower() or "could not translate host" in error_text.lower():
+            st.warning(
+                "The configuration is present, but the Streamlit Cloud runtime "
+                "cannot currently reach the configured Lakebase host."
+            )
+        else:
+            st.warning(
+                "Configuration exists, but the marketplace connection still failed."
+            )
+
+        st.code(error_text[:1200])
+
+    st.markdown("### Required Streamlit secret groups")
+    st.markdown(
+        """
+        **Databricks authentication**
+        - `DATABRICKS_HOST`
+        - `DATABRICKS_CLIENT_ID`
+        - `DATABRICKS_CLIENT_SECRET`
+
+        **Lakebase**
+        - `PGHOST`
+        - `PGPORT`
+        - `PGDATABASE`
+        - `PGUSER`
+        - `SHIPP_LAKEBASE_ENDPOINT`
+        - `SHIPP_LAKEBASE_SCHEMA`
+
+        **AI / retrieval**
+        - `SHIPP_LLM_ENDPOINT`
+        - `SHIPP_SQL_WAREHOUSE_ID`
+        - `SHIPP_CANDIDATE_MATCHES_TABLE`
+        - `SHIPP_SEARCH_INDEX`
+        - `SHIPP_LISTING_IMAGE_VOLUME`
+        """
+    )
+
+    st.info(
+        "After saving Streamlit Secrets, reboot the app. "
+        "The normal donor/requester marketplace will load automatically "
+        "when Lakebase connectivity passes."
+    )
+
+
 try:
     marketplace = load_marketplace()
 except Exception as exc:
-    st.error(
-        "SHIPP cannot reach its Lakebase/Databricks marketplace resources "
-        "right now. Please refresh the app or try again shortly."
-    )
-    st.code(str(exc))
+    render_startup_blocker(exc)
     st.stop()
 
 # External hosts such as Streamlit Community Cloud do not receive Databricks

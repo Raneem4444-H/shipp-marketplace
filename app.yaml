@@ -1,1 +1,20 @@
 command: ['streamlit', 'run', 'app.py']
+
+env:
+  - name: SHIPP_LLM_ENDPOINT
+    valueFrom: serving-endpoint
+
+  - name: SHIPP_SQL_WAREHOUSE_ID
+    valueFrom: sql-warehouse
+
+  - name: SHIPP_CANDIDATE_MATCHES_TABLE
+    valueFrom: candidate-matches
+
+  - name: SHIPP_SEARCH_INDEX
+    valueFrom: vector-search-index
+
+  - name: SHIPP_LAKEBASE_SCHEMA
+    value: shipp
+
+  - name: SHIPP_LAKEBASE_ENDPOINT
+    valueFrom: postgres

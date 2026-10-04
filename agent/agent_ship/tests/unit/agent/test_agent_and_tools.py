@@ -142,7 +142,7 @@ def test_confirm_save_rejects_non_candidate():
     agent, _, lake = make_agent([], matches=[match("l1")])
     lake.add_listing("l9")
     result = agent.confirm_save(user_id="user-1", request_id="req-1", listing_id="l9")
-    assert result.status is ActionStatus.REJECTED
+    assert result.status is ActionStatus.REJECTED_NOT_A_MATCH
     assert lake.saved == set()
 
 
@@ -150,4 +150,4 @@ def test_confirm_save_rejects_listing_withdrawn_after_proposal():
     agent, _, lake = make_agent([], matches=[match("l1")])
     lake.add_listing("l1", status="withdrawn")
     result = agent.confirm_save(user_id="user-1", request_id="req-1", listing_id="l1")
-    assert result.status is ActionStatus.REJECTED
+    assert result.status is ActionStatus.REJECTED_UNAVAILABLE

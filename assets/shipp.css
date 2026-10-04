@@ -332,6 +332,64 @@ div[data-baseweb="textarea"] > div:focus-within {
   font-weight: 700;
 }
 
+/* Operational listing gallery */
+.listing-image-placeholder {
+  min-height: 190px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+  border: 1px dashed var(--shipp-border-strong);
+  border-radius: 14px;
+  background:
+    linear-gradient(145deg, rgba(15, 102, 104, 0.08), rgba(15, 102, 104, 0.02));
+  color: var(--shipp-muted);
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+
+.listing-card-copy {
+  display: flex;
+  min-height: 205px;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.listing-description {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  color: var(--shipp-muted);
+  font-size: 0.86rem;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
+.listing-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--shipp-success);
+  font-size: 0.74rem;
+  font-weight: 850;
+}
+
+.listing-live-badge::before {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--shipp-success);
+  content: "";
+}
+
+[data-testid="stImage"] img {
+  border-radius: 14px;
+  border: 1px solid var(--shipp-border);
+  object-fit: cover;
+  max-height: 300px;
+}
+
 /* Recommendation */
 .shipp-recommendation {
   margin: 12px 0;

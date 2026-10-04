@@ -267,6 +267,214 @@ class MarketplaceRepo:
             return None
 
     # ------------------------------------------------------------------
+    # MARKETPLACE READS / DEPLOYMENT EVIDENCE
+    # ------------------------------------------------------------------
+
+    def list_available_listings(
+        self,
+        *,
+        donor_id: str | None = None,
+        limit: int = 30,
+    ) -> list[dict[str, Any]]:
+        """Return current, non-expired donor listings for marketplace display.
+
+        This is an operational read from Lakebase. It does not replace Gold
+        candidate matching: request-specific recommendations and Agent actions
+        still use trusted Gold matches.
+        """
+
+        where = [
+            "status = 'AVAILABLE'",
+            "(available_until IS NULL OR available_until >= now())",
+        ]
+        params: list[Any] = []
+
+        if donor_id:
+            where.append("donor_id = %s")
+            params.append(donor_id)
+
+        params.append(max(1, min(int(limit), 100)))
+
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT
+                    listing_id,
+                    donor_id,
+                    title,
+                    description,
+                    category,
+                    condition,
+                    location,
+                    available_from,
+                    available_until,
+                    status,
+                    created_at,
+                    updated_at
+                FROM {self._schema}.listings
+                WHERE {' AND '.join(where)}
+                ORDER BY created_at DESC
+                LIMIT %s
+                """,
+                tuple(params),
+            )
+            rows = cur.fetchall()
+
+        columns = (
+            "listing_id",
+            "donor_id",
+            "title",
+            "description",
+            "category",
+            "condition",
+            "location",
+            "available_from",
+            "available_until",
+            "status",
+            "created_at",
+            "updated_at",
+        )
+        return [dict(zip(columns, row)) for row in rows]
+
+    def get_listing_record(self, listing_id: str) -> dict[str, Any] | None:
+        """Read back one Listing after an App write for database confirmation."""
+
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT
+                    listing_id,
+                    donor_id,
+                    title,
+                    description,
+                    category,
+                    condition,
+                    location,
+                    available_from,
+                    available_until,
+                    status,
+                    created_at,
+                    updated_at
+                FROM {self._schema}.listings
+                WHERE listing_id = %s
+                """,
+                (listing_id,),
+            )
+            row = cur.fetchone()
+
+        if row is None:
+            return None
+
+        columns = (
+            "listing_id",
+            "donor_id",
+            "title",
+            "description",
+            "category",
+            "condition",
+            "location",
+            "available_from",
+            "available_until",
+            "status",
+            "created_at",
+            "updated_at",
+        )
+        return dict(zip(columns, row))
+
+    def get_request_record(self, request_id: str) -> dict[str, Any] | None:
+        """Read back one Request after an App write for database confirmation."""
+
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT
+                    request_id,
+                    requester_id,
+                    request_text,
+                    category,
+                    location,
+                    need_by_date,
+                    status,
+                    created_at,
+                    updated_at
+                FROM {self._schema}.requests
+                WHERE request_id = %s
+                """,
+                (request_id,),
+            )
+            row = cur.fetchone()
+
+        if row is None:
+            return None
+
+        columns = (
+            "request_id",
+            "requester_id",
+            "request_text",
+            "category",
+            "location",
+            "need_by_date",
+            "status",
+            "created_at",
+            "updated_at",
+        )
+        return dict(zip(columns, row))
+
+    def runtime_identity_permissions(self) -> dict[str, Any]:
+        """Return non-secret runtime identity and least-privilege evidence.
+
+        The query runs through the same connection factory used by the deployed
+        App, so current_user is the actual PostgreSQL role used by that runtime.
+        No credential or token is returned.
+        """
+
+        required = (
+            ("users", "SELECT"),
+            ("user_roles", "SELECT"),
+            ("roles", "SELECT"),
+            ("listings", "SELECT"),
+            ("listings", "INSERT"),
+            ("requests", "SELECT"),
+            ("requests", "INSERT"),
+            ("listing_files", "SELECT"),
+            ("listing_files", "INSERT"),
+            ("saved_items", "SELECT"),
+            ("saved_items", "INSERT"),
+            ("agent_activity", "INSERT"),
+        )
+
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    current_user,
+                    session_user,
+                    current_database(),
+                    has_schema_privilege(current_user, %s, 'USAGE')
+                """,
+                (self._schema,),
+            )
+            current_user, session_user, database_name, schema_usage = cur.fetchone()
+
+            privileges: dict[str, bool] = {}
+            for table_name, privilege in required:
+                qualified = f"{self._schema}.{table_name}"
+                cur.execute(
+                    "SELECT has_table_privilege(current_user, %s, %s)",
+                    (qualified, privilege),
+                )
+                privileges[f"{table_name}:{privilege}"] = bool(cur.fetchone()[0])
+
+        return {
+            "current_user": current_user,
+            "session_user": session_user,
+            "database": database_name,
+            "schema_usage": bool(schema_usage),
+            "privileges": privileges,
+            "all_required": bool(schema_usage) and all(privileges.values()),
+        }
+
+    # ------------------------------------------------------------------
     # REQUESTER REQUESTS
     # ------------------------------------------------------------------
 

@@ -98,10 +98,29 @@ def load_agent() -> ShippAgent:
 
 
 @st.cache_resource
+@st.cache_resource
 def load_marketplace() -> MarketplaceRepo:
     settings = AgentSettings.from_env()
     workspace = build_workspace_client()
     connect = build_lakebase_connect(settings, workspace)
+
+    # TEMP DEBUG: identify Lakebase/PostgreSQL role
+    conn = connect() if callable(connect) else connect
+
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT
+                current_user,
+                session_user,
+                current_database()
+        """)
+        current_user, session_user, database_name = cur.fetchone()
+
+    st.info(
+        f"Lakebase current_user: {current_user}\n\n"
+        f"Lakebase session_user: {session_user}\n\n"
+        f"Database: {database_name}"
+    )
 
     return MarketplaceRepo(
         connect,

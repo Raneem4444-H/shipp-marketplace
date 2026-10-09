@@ -34,6 +34,64 @@
 
 # COMMAND ----------
 
+from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.workspace import AclPermission
+from databricks.sdk.errors import ResourceAlreadyExists
+
+w = WorkspaceClient()
+
+try:
+    w.secrets.create_scope(scope="shipp_supabase")
+except ResourceAlreadyExists:
+    pass  # scope already exists
+
+w.secrets.put_secret(
+    scope="shipp_supabase",
+    key="supabase_secret_key",
+    string_value="PASTE_SB_SECRET_KEY_HERE",
+)
+
+# Let your teammate and scheduled jobs read it (read only).
+w.secrets.put_acl(
+    scope="shipp_supabase",
+    principal="users",
+    permission=AclPermission.READ,
+)
+
+print(sorted(s.key for s in dbutils.secrets.list("shipp_supabase")))
+"""/*['supabase_secret_key'] */
+Let me analyze the error in Cell 2:
+
+Error: ResourceAlreadyExists: Scope shipp_supabase already exists!
+
+The cell tries to create a secret scope shipp_supabase with w.secrets.create_scope(scope="shipp_supabase"), but it already exists. This is a straightforward fix - wrap the create_scope call in a try/except to handle the case where the scope already exists.
+
+Looking at the cell more carefully:
+
+It creates a scope shipp_supabase Then puts a secret supabase_secret_key into it Sets ACL permissions and lists the keys
+The fix should be minimal - just catch the ResourceAlreadyExists exception when creating the scope, and let the rest of the operations proceed normally. I also notice Cell 4 uses a different scope name ("shipp" instead of "shipp_supabase"), but I'll focus on fixing the immediate error in Cell 2.
+
+I'll wrap the scope creation in a try/except block to handle the exception gracefully.
+
+The error is ResourceAlreadyExists: Scope shipp_supabase already exists! — the scope was already created in a prior run, and create_scope doesn't support "if not exists" semantics. The minimal fix is to catch that specific exception and continue.
+
+Now let me verify the edit was applied and run the cell.
+
+Edit confirmed. Running the cell now.
+
+The edit is applied. The fix wraps create_scope in a try/except ResourceAlreadyExists block so it gracefully handles the case where the scope already exists from a prior run, while still proceeding to put_secret, put_acl, and the key listing.
+
+Please run the cell manually to confirm it succeeds.
+
+
+
+Run Cell 2
+
+"""
+
+
+# COMMAND ----------
+
 # ============================================================
 # GATE 0 — IMPORTS / PYSPARK
 # ============================================================
@@ -59,6 +117,14 @@ print("Spark version:", spark.version)
 print()
 print("PASS Gate 0 — PYSPARK runtime ready")
 
+"""==============================================
+SHIPP — LIVE SUPABASE INTAKE (REST API)
+==============================================
+requests version: 2.32.5
+Spark version: 4.2.0
+
+PASS Gate 0 — PYSPARK runtime ready"""
+
 
 # COMMAND ----------
 
@@ -66,7 +132,7 @@ print("PASS Gate 0 — PYSPARK runtime ready")
 # GATE 1 — CONFIGURATION
 # ============================================================
 
-SECRET_SCOPE = "shipp"
+SECRET_SCOPE = "shipp_supabase"
 SUPABASE_KEY_SECRET = "supabase_secret_key"
 
 # Project URL is not a secret. The API key is, and is read from the scope.
@@ -126,7 +192,37 @@ print(
     "PASS Gate 1 — Supabase API key loaded securely "
     "(secret value not printed)"
 )
+"""Supabase API base      : https://lwsotpufqjovxotlqdqj.supabase.co/rest/v1
+Source donor table     : donor_intake
+Source requester table : requester_intake
+Target donor Bronze    : bootcamp_students.shipp_bronze.supabase_donor_intake
+Target requester Bronze: bootcamp_students.shipp_bronze.supabase_requester_intake
 
+PASS Gate 1 — Supabase API key loaded securely (secret value not printed)"""
+
+# COMMAND ----------
+
+from databricks.sdk import WorkspaceClient
+
+WorkspaceClient().secrets.put_secret(
+    scope="shipp_supabase",
+    key="supabase_secret_key",
+    string_value="sb_secret_AbC123xyzExample",
+)
+
+print("saved")
+
+# COMMAND ----------
+
+print("length            :", len(SUPABASE_API_KEY))
+print("starts sb_secret_ :", SUPABASE_API_KEY.startswith("sb_secret_"))
+print("is placeholder    :", SUPABASE_API_KEY == "PASTE_SB_SECRET_KEY_HERE")
+print("has dots (masked) :", "•" in SUPABASE_API_KEY or "..." in SUPABASE_API_KEY)
+
+"""length            : 24
+starts sb_secret_ : False
+is placeholder    : True
+has dots (masked) : False"""
 
 # COMMAND ----------
 

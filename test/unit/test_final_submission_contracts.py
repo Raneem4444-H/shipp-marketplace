@@ -32,9 +32,8 @@ def test_root_databricks_app_is_canonical() -> None:
     missing = sorted(name for name in required_bindings if name not in manifest)
     assert not missing, f"Root app.yaml is missing managed-resource bindings: {missing}"
 
-    legacy_notice = (ROOT / "app" / "README.md").read_text(encoding="utf-8")
-    assert "Do not deploy this directory" in legacy_notice
-    assert "repository root" in legacy_notice
+    assert not (ROOT / "app" / "app.py").exists()
+    assert not (ROOT / "app" / "app.yaml").exists()
 
 
 def test_pipeline_uses_canonical_notebook_60_analytics_writer() -> None:

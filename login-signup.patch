@@ -1,0 +1,771 @@
+diff --git a/app.py b/app.py
+index c49d430..b2a7a5d 100644
+--- a/app.py
++++ b/app.py
+@@ -28,6 +28,14 @@ CSS_PATH = ROOT_DIR / "assets" / "shipp.css"
+ if str(AGENT_SRC) not in sys.path:
+     sys.path.insert(0, str(AGENT_SRC))
+ 
++from app_auth import ShippAuthRepo
++from app_login import (
++    JOURNEY_DELIVER,
++    JOURNEY_GIVE,
++    choose_journey,
++    render_account_bar,
++    render_auth_gate,
++)
+ from app_marketplace import MarketplaceRepo
+ from app_runtime import (
+     bootstrap_streamlit_secrets,
+@@ -266,6 +274,9 @@ except Exception as exc:
+     render_startup_blocker(exc)
+     st.stop()
+ 
++# Sign-in / sign-up reuse the same Lakebase connection as the marketplace.
++auth = ShippAuthRepo(marketplace.connect, marketplace.schema)
++
+ # External hosts such as Streamlit Community Cloud do not receive Databricks
+ # App resource bindings automatically. Missing Agent-only environment
+ # variables must not prevent the marketplace frontend from starting.
+@@ -740,51 +751,66 @@ st.markdown(
+     unsafe_allow_html=True,
+ )
+ 
+-st.markdown("## What would you like to do?")
++# Nothing below this line renders until a profile is signed in.
++profile = render_auth_gate(auth, DEMO_ALIASES)
++render_account_bar(profile, DEMO_ALIASES)
+ 
+-persona = st.radio(
+-    "Choose your marketplace journey",
+-    ["Give an item", "Find an item"],
+-    horizontal=True,
+-    label_visibility="collapsed",
+-)
++# The journey comes from the roles on the signed-in profile.
++persona = choose_journey(profile)
+ 
+ render_deployment_evidence()
+ 
+ 
+ # ============================================================
+-# DONOR JOURNEY
++# DELIVERY COMPANY JOURNEY (read-only)
+ # ============================================================
+ 
+-if persona == "Give an item":
+-    st.markdown("### Give an item")
++if persona == JOURNEY_DELIVER:
++    st.markdown("### Delivery jobs")
+     st.caption(
+-        "Create a clear listing with photos, item details, pickup location, "
+-        "and availability."
++        "Saved items, with where each one is picked up and where it is going. "
++        "This view is read-only: accepting and tracking jobs is not built yet."
+     )
+-
+     try:
+-        donors = marketplace.list_users("DONOR")
++        delivery_jobs = marketplace.list_delivery_jobs()
+     except Exception as exc:
+-        st.error("Donor profiles are temporarily unavailable.")
++        st.error("Delivery jobs are temporarily unavailable.")
+         st.code(str(exc))
+         st.stop()
+ 
+-    if not donors:
+-        st.info("No donor demo profiles are available.")
+-        st.stop()
++    if not delivery_jobs:
++        st.info("No saved items are waiting for delivery yet.")
++    else:
++        st.dataframe(
++            [
++                {
++                    "Item": job["title"],
++                    "Condition": str(job["condition"] or "").replace("_", " ").title(),
++                    "Pickup": job["pickup_location"] or "Not specified",
++                    "Drop-off": job["dropoff_location"] or "Not specified",
++                    "Saved": job["saved_at"],
++                }
++                for job in delivery_jobs
++            ],
++            use_container_width=True,
++            hide_index=True,
++        )
++    st.stop()
+ 
+-    donor_by_label = {
+-        display_user(row): row["user_id"]
+-        for row in donors
+-    }
+ 
+-    donor_label = st.selectbox(
+-        "Donor profile",
+-        list(donor_by_label),
+-        key="donor_profile",
++# ============================================================
++# DONOR JOURNEY
++# ============================================================
++
++if persona == JOURNEY_GIVE:
++    st.markdown("### Give an item")
++    st.caption(
++        "Create a clear listing with photos, item details, pickup location, "
++        "and availability."
+     )
+-    donor_id = donor_by_label[donor_label]
++
++    # The donor is the signed-in profile, not a pick from a list.
++    donor_id = profile["user_id"]
+ 
+     st.markdown("#### Your live listings")
+     st.caption(
+@@ -971,28 +997,8 @@ else:
+         "matches and ask SHIPP to compare the strongest options."
+     )
+ 
+-    try:
+-        requesters = marketplace.list_users("REQUESTER")
+-    except Exception as exc:
+-        st.error("Requester profiles are temporarily unavailable.")
+-        st.code(str(exc))
+-        st.stop()
+-
+-    if not requesters:
+-        st.info("No requester demo profiles are available.")
+-        st.stop()
+-
+-    requester_by_label = {
+-        display_user(row): row["user_id"]
+-        for row in requesters
+-    }
+-
+-    requester_label = st.selectbox(
+-        "Requester profile",
+-        list(requester_by_label),
+-        key="requester_profile",
+-    )
+-    requester_id = requester_by_label[requester_label]
++    # The requester is the signed-in profile, not a pick from a list.
++    requester_id = profile["user_id"]
+ 
+     st.markdown("#### Marketplace")
+     st.caption(
+diff --git a/app_auth.py b/app_auth.py
+index 6dddf24..27f358c 100644
+--- a/app_auth.py
++++ b/app_auth.py
+@@ -22,7 +22,7 @@ from typing import Any
+ from uuid import uuid4
+ 
+ 
+-ALLOWED_APP_ROLES = {"DONOR", "REQUESTER"}
++ALLOWED_APP_ROLES = {"DONOR", "REQUESTER", "SHIPPING_PARTNER"}
+ 
+ 
+ class AuthError(RuntimeError):
+@@ -58,14 +58,16 @@ class ShippAuthRepo:
+         )
+ 
+         if not normalized:
+-            raise InvalidRole("Choose at least one role: DONOR or REQUESTER.")
++            raise InvalidRole("Choose at least one role.")
+ 
+         invalid = set(normalized) - ALLOWED_APP_ROLES
+         if invalid:
+             raise InvalidRole(
+                 "Unsupported role(s): "
+                 + ", ".join(sorted(invalid))
+-                + ". Allowed app roles are DONOR and REQUESTER."
++                + ". Allowed app roles are: "
++                + ", ".join(sorted(ALLOWED_APP_ROLES))
++                + "."
+             )
+ 
+         return normalized
+@@ -209,7 +211,7 @@ class ShippAuthRepo:
+             if normalized not in ALLOWED_APP_ROLES:
+                 raise InvalidRole(
+                     f"Unsupported role: {role_id}. "
+-                    "Expected DONOR or REQUESTER."
++                    "Expected DONOR, REQUESTER or SHIPPING_PARTNER."
+                 )
+             role_filter = """
+               AND EXISTS (
+diff --git a/app_login.py b/app_login.py
+new file mode 100644
+index 0000000..dd2a38f
+--- /dev/null
++++ b/app_login.py
+@@ -0,0 +1,250 @@
++"""Log in / sign up screens for the SHIPP Streamlit app.
++
++The screens sit in front of the marketplace and call ``ShippAuthRepo``
++(``app_auth.py``), which reads and writes ``shipp.users`` and
++``shipp.user_roles`` in Lakebase.
++
++There is no password. The SHIPP schema has no credential columns and identity
++verification is outside P0, so "log in" means choosing an existing active
++profile. Do not present this as secure authentication.
++"""
++
++from __future__ import annotations
++
++from collections.abc import Mapping
++from typing import Any
++
++import streamlit as st
++
++from app_auth import AuthError, ShippAuthRepo
++
++
++SESSION_KEY = "shipp_profile"
++WELCOME_KEY = "shipp_welcome"
++
++JOURNEY_GIVE = "Give an item"
++JOURNEY_FIND = "Find an item"
++JOURNEY_DELIVER = "Deliver items"
++
++# Order here is the order shown on screen.
++ROLE_LABELS = {
++    "DONOR": "Donor",
++    "REQUESTER": "Requester",
++    "SHIPPING_PARTNER": "Delivery company",
++}
++
++ROLE_HINTS = {
++    "DONOR": "I have household items to give away",
++    "REQUESTER": "I need household items",
++    "SHIPPING_PARTNER": "We pick up and deliver items",
++}
++
++ROLE_JOURNEYS = {
++    "DONOR": JOURNEY_GIVE,
++    "REQUESTER": JOURNEY_FIND,
++    "SHIPPING_PARTNER": JOURNEY_DELIVER,
++}
++
++# Per-user state that must not leak from one signed-in profile to the next.
++# app.py restores its defaults for these on the next run.
++_USER_STATE_KEYS = (
++    "messages",
++    "pending_save",
++    "tool_trace",
++    "active_request_id",
++    "active_requester_id",
++    "last_created_listing_id",
++    "last_created_request_id",
++    "last_saved_item_id",
++    "last_saved_listing_id",
++    "last_save_status",
++    "last_saved_refresh_pass",
++    "last_agent_read_tools",
++)
++
++
++def display_name(profile: Mapping[str, Any], aliases: Mapping[str, str] | None) -> str:
++    return (aliases or {}).get(profile["user_id"], profile["name"])
++
++
++def roles_text(roles: list[str]) -> str:
++    return ", ".join(ROLE_LABELS[r] for r in ROLE_LABELS if r in roles)
++
++
++def profile_options(
++    profiles: list[dict[str, Any]],
++    aliases: Mapping[str, str] | None = None,
++) -> dict[str, str]:
++    """Map a readable, unique label to each profile's user_id."""
++
++    options: dict[str, str] = {}
++    for profile in profiles:
++        roles = roles_text(profile.get("roles") or [])
++        if not roles:
++            # Profile only has roles this app has no screen for.
++            continue
++        label = f"{display_name(profile, aliases)} · {roles}"
++        if label in options:
++            label = f"{label} · {profile['user_id'][:8]}"
++        options[label] = profile["user_id"]
++    return options
++
++
++def journeys_for(profile: Mapping[str, Any]) -> list[str]:
++    roles = profile.get("roles") or []
++    return [ROLE_JOURNEYS[r] for r in ROLE_JOURNEYS if r in roles]
++
++
++def start_session(profile: Mapping[str, Any]) -> None:
++    clear_user_state()
++    st.session_state[SESSION_KEY] = {
++        "user_id": profile["user_id"],
++        "name": profile["name"],
++        "current_city": profile.get("current_city"),
++        "roles": list(profile.get("roles") or []),
++    }
++
++
++def clear_user_state() -> None:
++    for key in _USER_STATE_KEYS:
++        st.session_state.pop(key, None)
++
++
++def sign_out() -> None:
++    clear_user_state()
++    st.session_state.pop(SESSION_KEY, None)
++    st.session_state.pop(WELCOME_KEY, None)
++
++
++def _render_login(auth: ShippAuthRepo, aliases: Mapping[str, str] | None) -> None:
++    try:
++        options = profile_options(auth.list_profiles(), aliases)
++    except Exception as exc:
++        st.error("Profiles are temporarily unavailable.")
++        st.code(str(exc))
++        return
++
++    if not options:
++        st.info("No profiles exist yet. Use the Sign up tab to create the first one.")
++        return
++
++    with st.form("shipp_login_form"):
++        label = st.selectbox("Your profile", list(options))
++        submitted = st.form_submit_button("Log in", use_container_width=True)
++
++    if not submitted:
++        return
++
++    try:
++        profile = auth.sign_in(options[label])
++    except AuthError as exc:
++        st.error(str(exc))
++        return
++    except Exception as exc:
++        st.error("Log in failed. Nothing was changed.")
++        st.code(str(exc))
++        return
++
++    start_session(profile)
++    st.rerun()
++
++
++def _render_signup(auth: ShippAuthRepo) -> None:
++    with st.form("shipp_signup_form"):
++        role = st.radio(
++            "I want to sign up as",
++            list(ROLE_LABELS),
++            format_func=lambda r: f"{ROLE_LABELS[r]} — {ROLE_HINTS[r]}",
++        )
++        name = st.text_input("Full name or company name")
++        city = st.text_input("City", placeholder="e.g. Abu Dhabi")
++        submitted = st.form_submit_button("Create account", use_container_width=True)
++
++    if not submitted:
++        return
++
++    if not name.strip():
++        st.error("Please enter a name.")
++        return
++    if not city.strip():
++        st.error("Please enter a city.")
++        return
++
++    try:
++        profile = auth.register_profile(
++            name=name,
++            current_city=city,
++            roles=[role],
++        )
++    except AuthError as exc:
++        st.error(str(exc))
++        return
++    except Exception as exc:
++        st.error("The account could not be created. Nothing was saved.")
++        st.code(str(exc))
++        return
++
++    start_session(profile)
++    st.session_state[WELCOME_KEY] = True
++    st.rerun()
++
++
++def render_auth_gate(
++    auth: ShippAuthRepo,
++    aliases: Mapping[str, str] | None = None,
++) -> dict[str, Any]:
++    """Return the signed-in profile, or show log in / sign up and stop."""
++
++    profile = st.session_state.get(SESSION_KEY)
++    if profile:
++        return profile
++
++    st.markdown("## Log in or create an account")
++    login_tab, signup_tab = st.tabs(["Log in", "Sign up"])
++    with login_tab:
++        _render_login(auth, aliases)
++    with signup_tab:
++        _render_signup(auth)
++
++    st.stop()
++    raise RuntimeError("unreachable: st.stop() ends the script run")
++
++
++def render_account_bar(
++    profile: Mapping[str, Any],
++    aliases: Mapping[str, str] | None = None,
++) -> None:
++    left, right = st.columns([5, 1])
++    with left:
++        st.markdown(
++            f"Signed in as **{display_name(profile, aliases)}** · "
++            f"{roles_text(profile.get('roles') or [])}"
++        )
++    with right:
++        if st.button("Log out", key="shipp_logout", use_container_width=True):
++            sign_out()
++            st.rerun()
++
++    if st.session_state.pop(WELCOME_KEY, False):
++        st.success("Your account is created. Next time, pick your name on the Log in tab.")
++
++
++def choose_journey(profile: Mapping[str, Any]) -> str:
++    """Pick the journey from the profile's roles; ask only if there are several."""
++
++    journeys = journeys_for(profile)
++    if not journeys:
++        st.error("This profile has no role this app supports.")
++        st.stop()
++        raise RuntimeError("unreachable: st.stop() ends the script run")
++
++    if len(journeys) == 1:
++        return journeys[0]
++
++    st.markdown("## What would you like to do?")
++    return st.radio(
++        "Choose your marketplace journey",
++        journeys,
++        horizontal=True,
++        label_visibility="collapsed",
++    )
+diff --git a/app_marketplace.py b/app_marketplace.py
+index 2362134..0bebfaf 100644
+--- a/app_marketplace.py
++++ b/app_marketplace.py
+@@ -39,6 +39,15 @@ class MarketplaceRepo:
+             image_volume_path.rstrip("/") if image_volume_path else None
+         )
+ 
++    @property
++    def connect(self) -> Callable[[], Any]:
++        """Lakebase connection factory, shared with the auth repository."""
++        return self._connect
++
++    @property
++    def schema(self) -> str:
++        return self._schema
++
+     # ------------------------------------------------------------------
+     # USERS / PERSONAS
+     # ------------------------------------------------------------------
+@@ -605,3 +614,48 @@ class MarketplaceRepo:
+             }
+             for row in rows
+         ]
++
++    # ------------------------------------------------------------------
++    # DELIVERY COMPANY (read-only)
++    # ------------------------------------------------------------------
++
++    def list_delivery_jobs(self, limit: int = 50) -> list[dict[str, Any]]:
++        """Saved items with their pickup (listing) and drop-off (request) areas.
++
++        Read-only. A saved item is the only operational record that links a
++        listing to a request, so it is the source for delivery work.
++        """
++
++        with self._connect() as conn, conn.cursor() as cur:
++            cur.execute(
++                f"""
++                SELECT
++                    s.saved_item_id,
++                    l.title,
++                    l.condition,
++                    l.location AS pickup_location,
++                    r.location AS dropoff_location,
++                    s.saved_at
++                FROM {self._schema}.saved_items s
++                JOIN {self._schema}.listings l
++                  ON l.listing_id = s.listing_id
++                JOIN {self._schema}.requests r
++                  ON r.request_id = s.request_id
++                ORDER BY s.saved_at DESC
++                LIMIT %s
++                """,
++                (int(limit),),
++            )
++            rows = cur.fetchall()
++
++        return [
++            {
++                "saved_item_id": row[0],
++                "title": row[1],
++                "condition": row[2],
++                "pickup_location": row[3],
++                "dropoff_location": row[4],
++                "saved_at": row[5],
++            }
++            for row in rows
++        ]
+diff --git a/test/unit/test_app_login.py b/test/unit/test_app_login.py
+new file mode 100644
+index 0000000..67ead0e
+--- /dev/null
++++ b/test/unit/test_app_login.py
+@@ -0,0 +1,245 @@
++"""Tests for the log in / sign up screens (app_login.py).
++
++Streamlit is replaced by a small fake so the screen logic runs without a
++browser or a Lakebase connection.
++"""
++
++import contextlib
++import importlib
++import sys
++import types
++
++import app_auth
++
++
++class _Stop(Exception):
++    pass
++
++
++class _Rerun(Exception):
++    pass
++
++
++class _Ctx:
++    def __enter__(self):
++        return self
++
++    def __exit__(self, *exc):
++        return False
++
++
++class FakeStreamlit(types.ModuleType):
++    def __init__(self, *, values=None, clicked=()):
++        super().__init__("streamlit")
++        self.session_state = {}
++        self.values = values or {}
++        self.clicked = set(clicked)
++        self.errors = []
++        self.messages = []
++
++    # layout
++    def tabs(self, labels):
++        return [_Ctx() for _ in labels]
++
++    def columns(self, spec):
++        return [_Ctx() for _ in (spec if isinstance(spec, list) else range(spec))]
++
++    def form(self, key):
++        return _Ctx()
++
++    # inputs
++    def selectbox(self, label, options, **kwargs):
++        return self.values.get(label, options[0])
++
++    def radio(self, label, options, **kwargs):
++        return self.values.get(label, options[0])
++
++    def text_input(self, label, **kwargs):
++        return self.values.get(label, "")
++
++    def form_submit_button(self, label, **kwargs):
++        return label in self.clicked
++
++    def button(self, label, **kwargs):
++        return label in self.clicked
++
++    # output
++    def markdown(self, text, **kwargs):
++        self.messages.append(text)
++
++    def error(self, text):
++        self.errors.append(text)
++
++    info = success = code = markdown
++
++    # control flow
++    def stop(self):
++        raise _Stop()
++
++    def rerun(self):
++        raise _Rerun()
++
++
++class FakeAuth:
++    def __init__(self, profiles=()):
++        self.profiles = {p["user_id"]: dict(p) for p in profiles}
++        self.registered = []
++
++    def list_profiles(self, role_id=None):
++        return list(self.profiles.values())
++
++    def sign_in(self, user_id):
++        if user_id not in self.profiles:
++            raise app_auth.ProfileNotFound("Active SHIPP profile was not found.")
++        return self.profiles[user_id]
++
++    def register_profile(self, *, name, current_city, roles):
++        profile = {
++            "user_id": f"new-{len(self.registered) + 1}",
++            "name": name.strip(),
++            "current_city": current_city.strip(),
++            "roles": list(roles),
++        }
++        self.registered.append(profile)
++        self.profiles[profile["user_id"]] = profile
++        return profile
++
++
++@contextlib.contextmanager
++def login_module(fake_st):
++    """Import app_login against the fake Streamlit, then restore the real one."""
++
++    saved = {name: sys.modules.get(name) for name in ("streamlit", "app_login")}
++    sys.modules["streamlit"] = fake_st
++    sys.modules.pop("app_login", None)
++    try:
++        yield importlib.import_module("app_login")
++    finally:
++        for name, module in saved.items():
++            if module is None:
++                sys.modules.pop(name, None)
++            else:
++                sys.modules[name] = module
++
++
++DONOR = {"user_id": "demo-donor-001", "name": "Demo Donor", "current_city": "Abu Dhabi", "roles": ["DONOR"]}
++REQUESTER = {"user_id": "demo-requester-001", "name": "Demo Requester", "current_city": "Abu Dhabi", "roles": ["REQUESTER"]}
++
++
++def _run(fn, *args):
++    try:
++        fn(*args)
++    except _Stop:
++        return "stop"
++    except _Rerun:
++        return "rerun"
++    return "returned"
++
++
++def test_gate_blocks_the_app_when_nobody_is_signed_in():
++    st = FakeStreamlit()
++    with login_module(st) as login:
++        assert _run(login.render_auth_gate, FakeAuth([DONOR])) == "stop"
++        assert login.SESSION_KEY not in st.session_state
++
++
++def test_log_in_stores_the_selected_profile_and_reruns():
++    st = FakeStreamlit(
++        values={"Your profile": "Kim Stevens · Requester"},
++        clicked={"Log in"},
++    )
++    aliases = {"demo-requester-001": "Kim Stevens"}
++    with login_module(st) as login:
++        assert _run(login.render_auth_gate, FakeAuth([DONOR, REQUESTER]), aliases) == "rerun"
++        profile = st.session_state[login.SESSION_KEY]
++        assert profile["user_id"] == "demo-requester-001"
++        assert profile["roles"] == ["REQUESTER"]
++        # Second run: the gate lets the signed-in profile through.
++        st.clicked = set()
++        assert login.render_auth_gate(FakeAuth([DONOR, REQUESTER]), aliases) == profile
++
++
++def test_sign_up_creates_one_profile_with_the_chosen_role():
++    for role in ("DONOR", "REQUESTER", "SHIPPING_PARTNER"):
++        st = FakeStreamlit(
++            values={
++                "I want to sign up as": role,
++                "Full name or company name": "  Roro  ",
++                "City": "Amman",
++            },
++            clicked={"Create account"},
++        )
++        auth = FakeAuth()
++        with login_module(st) as login:
++            assert _run(login.render_auth_gate, auth) == "rerun"
++            assert len(auth.registered) == 1
++            assert auth.registered[0]["roles"] == [role]
++            assert st.session_state[login.SESSION_KEY]["user_id"] == "new-1"
++            assert login.journeys_for(st.session_state[login.SESSION_KEY]) == [
++                login.ROLE_JOURNEYS[role]
++            ]
++
++
++def test_sign_up_without_a_name_or_city_writes_nothing():
++    for values in (
++        {"Full name or company name": "", "City": "Amman"},
++        {"Full name or company name": "Roro", "City": "  "},
++    ):
++        st = FakeStreamlit(values=values, clicked={"Create account"})
++        auth = FakeAuth()
++        with login_module(st) as login:
++            assert _run(login.render_auth_gate, auth) == "stop"
++            assert auth.registered == []
++            assert st.errors
++            assert login.SESSION_KEY not in st.session_state
++
++
++def test_log_out_clears_the_profile_and_per_user_state():
++    st = FakeStreamlit(clicked={"Log out"})
++    with login_module(st) as login:
++        login.start_session(DONOR)
++        st.session_state["messages"] = ["private chat"]
++        st.session_state["active_request_id"] = "demo-request-001"
++        assert _run(login.render_account_bar, DONOR) == "rerun"
++        assert login.SESSION_KEY not in st.session_state
++        assert "messages" not in st.session_state
++        assert "active_request_id" not in st.session_state
++
++
++def test_switching_profile_does_not_keep_the_previous_users_state():
++    st = FakeStreamlit()
++    with login_module(st) as login:
++        login.start_session(REQUESTER)
++        st.session_state["pending_save"] = {"listing_id": "x"}
++        login.start_session(DONOR)
++        assert "pending_save" not in st.session_state
++        assert st.session_state[login.SESSION_KEY]["user_id"] == DONOR["user_id"]
++
++
++def test_journey_follows_roles_and_only_asks_when_there_are_several():
++    st = FakeStreamlit()
++    with login_module(st) as login:
++        assert login.choose_journey(DONOR) == login.JOURNEY_GIVE
++        assert login.choose_journey(REQUESTER) == login.JOURNEY_FIND
++        both = dict(DONOR, roles=["REQUESTER", "DONOR"])
++        assert login.journeys_for(both) == [login.JOURNEY_GIVE, login.JOURNEY_FIND]
++        assert _run(login.choose_journey, dict(DONOR, roles=[])) == "stop"
++
++
++def test_profile_labels_are_unique_for_people_with_the_same_name():
++    st = FakeStreamlit()
++    twin = dict(DONOR, user_id="another-donor-id")
++    with login_module(st) as login:
++        options = login.profile_options([DONOR, twin])
++        assert sorted(options.values()) == ["another-donor-id", "demo-donor-001"]
++
++
++def test_auth_repo_accepts_delivery_company_and_rejects_unknown_roles():
++    repo = app_auth.ShippAuthRepo(connect=lambda: None)
++    assert repo._normalize_roles([" shipping_partner "]) == ["SHIPPING_PARTNER"]
++    for bad in (["ADMIN"], []):
++        try:
++            repo._normalize_roles(bad)
++        except app_auth.InvalidRole:
++            continue
++        raise AssertionError(f"{bad} should be rejected")

@@ -11,12 +11,14 @@
     "expected_listing_ids": ["demo-listing-001"],
     "notes": "demo-listing-001 is the solid wooden table."
   },
+
   {
     "id": "q03",
-    "query": "something small to eat at in a studio apartment",
+    "query": "I need a set of four wooden dining chairs for my dining table",
     "expected_listing_ids": ["demo-listing-002"],
-    "notes": "demo-listing-002 is the compact four-seater for small apartments."
-  },
+    "notes": "Verified current Gold listing: demo-listing-002 is a Dining Chairs Set."
+  }
+
   {
     "id": "q04",
     "query": "electric guitar amplifier",

@@ -1,13 +1,16 @@
 # Databricks notebook source
-
+# /// script
+# [tool.databricks.environment]
+# environment_version = "6"
+# ///
 # ============================================================
 # SHIPP — LIVE SUPABASE DONOR / REQUESTER INGESTION
 #
 # SOURCE:
-#   Supabase PostgreSQL
+#   Supabase REST API (PostgREST) over HTTPS
 #
 # PROCESSING:
-#   Python DB read -> PySpark DataFrames
+#   Paged API read -> PySpark DataFrames
 #   -> PySpark normalization
 #   -> PySpark data quality
 #   -> PySpark deduplication
@@ -36,32 +39,22 @@
 # ============================================================
 
 import json
+import time
 from datetime import date, datetime
 from typing import Any
 
-import psycopg
-from psycopg.rows import dict_row
+import requests
 
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
-import json
-from datetime import date, datetime
-from typing import Any
 
-
-
-print("psycopg version:", psycopg.__version__)
-print("Spark version:", spark.version)
-
-print("PASS — psycopg + PYSPARK available")
 
 print("==============================================")
-print("SHIPP — LIVE SUPABASE INTAKE")
+print("SHIPP — LIVE SUPABASE INTAKE (REST API)")
 print("==============================================")
+print("requests version:", requests.__version__)
 print("Spark version:", spark.version)
-print("PySpark functions loaded:", F is not None)
-print("PySpark types loaded:", T is not None)
 
 print()
 print("PASS Gate 0 — PYSPARK runtime ready")
@@ -74,10 +67,20 @@ print("PASS Gate 0 — PYSPARK runtime ready")
 # ============================================================
 
 SECRET_SCOPE = "shipp"
-SUPABASE_DB_SECRET = "supabase-db-url"
+SUPABASE_KEY_SECRET = "supabase_secret_key"
 
-DONOR_SOURCE_TABLE = "public.donor_intake"
-REQUESTER_SOURCE_TABLE = "public.requester_intake"
+# Project URL is not a secret. The API key is, and is read from the scope.
+SUPABASE_URL = "https://lwsotpufqjovxotlqdqj.supabase.co"
+
+# Table names as exposed by the Supabase Data API (public schema).
+DONOR_SOURCE_TABLE = "donor_intake"
+REQUESTER_SOURCE_TABLE = "requester_intake"
+
+PAGE_SIZE = 1000
+HTTP_TIMEOUT_SECONDS = 30
+MAX_RETRIES = 4
+BACKOFF_SECONDS = 2
+RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 
 DONOR_BRONZE = (
     "bootcamp_students.shipp_bronze.supabase_donor_intake"
@@ -88,18 +91,30 @@ REQUESTER_BRONZE = (
 )
 
 
-SUPABASE_DB_URL = dbutils.secrets.get(
-    scope=SECRET_SCOPE,
-    key=SUPABASE_DB_SECRET,
-).strip()
+try:
+    SUPABASE_API_KEY = dbutils.secrets.get(
+        scope=SECRET_SCOPE,
+        key=SUPABASE_KEY_SECRET,
+    ).strip()
+except Exception as exc:
+    # Names only. Secret values are never printed.
+    available = sorted(
+        s.key for s in dbutils.secrets.list(SECRET_SCOPE)
+    )
+    raise AssertionError(
+        f"BLOCKED — secret '{SECRET_SCOPE}/{SUPABASE_KEY_SECRET}' "
+        f"not readable ({type(exc).__name__}). "
+        f"Keys in scope '{SECRET_SCOPE}': {available}"
+    )
 
 
-assert SUPABASE_DB_URL, (
-    "BLOCKED — Databricks secret "
-    "'shipp/supabase-db-url' is empty."
+assert SUPABASE_API_KEY, (
+    f"BLOCKED — Databricks secret "
+    f"'{SECRET_SCOPE}/{SUPABASE_KEY_SECRET}' is empty."
 )
 
 
+print("Supabase API base      :", f"{SUPABASE_URL}/rest/v1")
 print("Source donor table     :", DONOR_SOURCE_TABLE)
 print("Source requester table :", REQUESTER_SOURCE_TABLE)
 
@@ -108,7 +123,7 @@ print("Target requester Bronze:", REQUESTER_BRONZE)
 
 print()
 print(
-    "PASS Gate 1 — Supabase connection loaded securely "
+    "PASS Gate 1 — Supabase API key loaded securely "
     "(secret value not printed)"
 )
 
@@ -116,13 +131,65 @@ print(
 # COMMAND ----------
 
 # ============================================================
-# GATE 2 — READ LIVE SUPABASE DATABASE
+# GATE 2 — READ LIVE SUPABASE REST API
 # ============================================================
 
 ALLOWED_SOURCE_TABLES = {
     DONOR_SOURCE_TABLE,
     REQUESTER_SOURCE_TABLE,
 }
+
+
+def api_get(
+    url: str,
+    params: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """One GET with retry/backoff. Raises with a readable reason."""
+
+    last_error = "no attempt made"
+
+    for attempt in range(1, MAX_RETRIES + 1):
+
+        try:
+            response = requests.get(
+                url,
+                params=params,
+                headers={
+                    "apikey": SUPABASE_API_KEY,
+                    "Accept": "application/json",
+                },
+                timeout=HTTP_TIMEOUT_SECONDS,
+            )
+            status = response.status_code
+            body = response.text
+
+        except requests.RequestException as exc:
+            status = -1
+            body = type(exc).__name__
+
+        if status == 200:
+            return response.json()
+
+        last_error = f"HTTP {status}: {body[:300]}"
+
+        retryable = status == -1 or status in RETRYABLE_STATUS
+
+        if retryable and attempt < MAX_RETRIES:
+            wait = BACKOFF_SECONDS * (2 ** (attempt - 1))
+            print(
+                f"  GET {url} -> {status}, "
+                f"retry {attempt}/{MAX_RETRIES} in {wait}s"
+            )
+            time.sleep(wait)
+            continue
+
+        break
+
+    raise RuntimeError(
+        f"FAIL — Supabase API call to {url} failed. {last_error}\n"
+        "401/403 -> wrong API key in the secret scope.\n"
+        "404     -> table missing, or not exposed in the public schema."
+    )
 
 
 def fetch_supabase_table(
@@ -134,28 +201,29 @@ def fetch_supabase_table(
             f"Unexpected source table: {table_name}"
         )
 
-    with psycopg.connect(
-        SUPABASE_DB_URL,
-        connect_timeout=15,
-        row_factory=dict_row,
-    ) as conn:
+    url = f"{SUPABASE_URL}/rest/v1/{table_name}"
 
-        with conn.cursor() as cur:
+    rows: list[dict[str, Any]] = []
+    offset = 0
 
-            cur.execute(
-                f"""
-                SELECT *
-                FROM {table_name}
-                ORDER BY created_at ASC
-                """
-            )
+    while True:
 
-            rows = cur.fetchall()
+        page = api_get(
+            url,
+            {
+                "select": "*",
+                "order": "created_at.asc",
+                "limit": PAGE_SIZE,
+                "offset": offset,
+            },
+        )
 
-    return [
-        dict(row)
-        for row in rows
-    ]
+        rows.extend(page)
+
+        if len(page) < PAGE_SIZE:
+            return rows
+
+        offset += PAGE_SIZE
 
 
 donor_rows = fetch_supabase_table(
@@ -190,7 +258,7 @@ assert requester_rows, (
 print()
 print(
     "PASS Gate 2 — live Supabase donor/requester "
-    "data received"
+    "data received over the REST API"
 )
 
 
@@ -314,7 +382,15 @@ REQUESTER_SCHEMA = T.StructType(
 
 def serialize_values(
     rows: list[dict[str, Any]],
+    schema: T.StructType,
 ) -> list[dict[str, Any]]:
+    """Shape API rows to the Spark schema.
+
+    - keeps only the columns named in the schema (the API may return more)
+    - JSON whole numbers such as 25 arrive as int; DoubleType needs float
+    - date/datetime objects become ISO strings
+    Bad values are left as they are so Gate 5 rejects them; nothing is invented.
+    """
 
     output = []
 
@@ -322,18 +398,28 @@ def serialize_values(
 
         clean_row = {}
 
-        for key, value in row.items():
+        for field in schema.fields:
 
-            if isinstance(
-                value,
-                (datetime, date),
+            value = row.get(field.name)
+
+            if isinstance(value, (datetime, date)):
+                value = value.isoformat()
+
+            elif (
+                isinstance(field.dataType, T.DoubleType)
+                and isinstance(value, (int, float))
+                and not isinstance(value, bool)
             ):
-                clean_row[key] = (
-                    value.isoformat()
-                )
+                value = float(value)
 
-            else:
-                clean_row[key] = value
+            elif (
+                isinstance(field.dataType, T.StringType)
+                and value is not None
+                and not isinstance(value, str)
+            ):
+                value = str(value)
+
+            clean_row[field.name] = value
 
         output.append(
             clean_row
@@ -343,12 +429,12 @@ def serialize_values(
 
 
 donor_df = spark.createDataFrame(
-    serialize_values(donor_rows),
+    serialize_values(donor_rows, DONOR_SCHEMA),
     schema=DONOR_SCHEMA,
 )
 
 requester_df = spark.createDataFrame(
-    serialize_values(requester_rows),
+    serialize_values(requester_rows, REQUESTER_SCHEMA),
     schema=REQUESTER_SCHEMA,
 )
 
@@ -384,7 +470,7 @@ display(
 
 print()
 print(
-    "PASS Gate 3 — Supabase rows converted "
+    "PASS Gate 3 — Supabase API rows converted "
     "to explicit PYSPARK DataFrames"
 )
 
@@ -834,7 +920,7 @@ donor_output = (
     .withColumn(
         "source_table",
         F.lit(
-            DONOR_SOURCE_TABLE
+            f"public.{DONOR_SOURCE_TABLE}"
         ),
     )
 
@@ -858,7 +944,7 @@ requester_output = (
     .withColumn(
         "source_table",
         F.lit(
-            REQUESTER_SOURCE_TABLE
+            f"public.{REQUESTER_SOURCE_TABLE}"
         ),
     )
 
@@ -1137,7 +1223,7 @@ print(
 
 
 summary = {
-    "source": "supabase_postgresql",
+    "source": "supabase_rest_api",
     "processing_engine": "pyspark",
     "donor_target": DONOR_BRONZE,
     "requester_target": REQUESTER_BRONZE,
@@ -1154,6 +1240,14 @@ print(
     json.dumps(
         summary,
         indent=2,
+        default=str,
+    )
+)
+
+
+dbutils.notebook.exit(
+    json.dumps(
+        summary,
         default=str,
     )
 )

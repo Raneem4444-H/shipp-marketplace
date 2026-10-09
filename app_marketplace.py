@@ -241,18 +241,20 @@ class MarketplaceRepo:
         if self._workspace is None:
             return None
 
+        
         with self._connect() as conn, conn.cursor() as cur:
             cur.execute(
                 f"""
                 SELECT file_path
                 FROM {self._schema}.listing_files
                 WHERE listing_id = %s
-                  AND (file_type IS NULL OR file_type LIKE 'image/%')
+                AND (file_type IS NULL OR file_type LIKE %s)
                 ORDER BY uploaded_at ASC
                 LIMIT 1
                 """,
-                (listing_id,),
+                (listing_id, "image/%"),
             )
+
             row = cur.fetchone()
 
         if not row:

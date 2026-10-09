@@ -277,6 +277,10 @@ class MarketplaceRepo:
         *,
         donor_id: str | None = None,
         limit: int = 30,
+        offset: int = 0,
+        category: str | None = None,
+        condition: str | None = None,
+        query: str | None = None,
     ) -> list[dict[str, Any]]:
         """Return current, non-expired donor listings for marketplace display.
 
@@ -294,8 +298,20 @@ class MarketplaceRepo:
         if donor_id:
             where.append("donor_id = %s")
             params.append(donor_id)
+        if category:
+            where.append("category = %s")
+            params.append(category)
+        if condition:
+            where.append("condition = %s")
+            params.append(condition)
+        if query and query.strip():
+            where.append("(title ILIKE %s OR description ILIKE %s)")
+            pattern = f"%{query.strip()[:120]}%"
+            params.extend([pattern, pattern])
 
-        params.append(max(1, min(int(limit), 100)))
+        # Bind all visitor input, including LIMIT/OFFSET. Stable tie-breaking
+        # prevents duplicate or missing rows in paginated results.
+        params.extend([max(1, min(int(limit), 100)), max(0, int(offset))])
 
         with self._connect() as conn, conn.cursor() as cur:
             cur.execute(
@@ -315,8 +331,8 @@ class MarketplaceRepo:
                     updated_at
                 FROM {self._schema}.listings
                 WHERE {' AND '.join(where)}
-                ORDER BY created_at DESC
-                LIMIT %s
+                ORDER BY created_at DESC, listing_id DESC
+                LIMIT %s OFFSET %s
                 """,
                 tuple(params),
             )

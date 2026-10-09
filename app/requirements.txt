@@ -1,6 +1,0 @@
-streamlit
-databricks-sdk
-databricks-sql-connector
-pandas
-openai>=1,<2
-psycopg[binary]>=3.2,<4

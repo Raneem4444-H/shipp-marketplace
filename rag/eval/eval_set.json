@@ -17,7 +17,7 @@
     "query": "I need a set of four wooden dining chairs for my dining table",
     "expected_listing_ids": ["demo-listing-002"],
     "notes": "Verified current Gold listing: demo-listing-002 is a Dining Chairs Set."
-  }
+  },
 
   {
     "id": "q04",

@@ -303,6 +303,7 @@ defaults = {
     "last_save_status": None,
     "last_saved_refresh_pass": None,
     "last_agent_read_tools": [],
+    "review_error": None,
     "donor_lat": 24.4976,
     "donor_lon": 54.4075,
     "requester_lat": 24.5014,
@@ -1424,6 +1425,7 @@ else:
                                     listing_id=match.listing_id,
                                 )
                             st.session_state.pending_save = review.pending_save
+                            st.session_state.review_error = None
                             st.session_state.tool_trace = review.tool_trace
                             st.session_state.messages.append(
                                 {"role": "assistant", "content": review.reply}
@@ -1442,8 +1444,18 @@ else:
                             )
                         except Exception as exc:
                             st.session_state.pending_save = None
-                            st.error("Review could not be completed.")
-                            st.code(str(exc))
+                            st.session_state.tool_trace = []
+                            st.session_state.messages.append(
+                                {
+                                    "role": "assistant",
+                                    "content": (
+                                        "Review could not be completed. "
+                                        "Please retry, or ask the administrator "
+                                        "to inspect the App logs."
+                                    ),
+                                }
+                            )
+                            st.session_state.review_error = str(exc)
                         st.rerun()
 
         st.markdown("---")
@@ -1604,6 +1616,10 @@ else:
                             "write was performed."
                         )
                         st.code(str(exc))
+
+        if st.session_state.review_error:
+            st.error("Technical review error (admin diagnostics):")
+            st.code(st.session_state.review_error)
 
         if st.session_state.tool_trace:
             tool_names = [

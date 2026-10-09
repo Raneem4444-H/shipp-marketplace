@@ -708,7 +708,7 @@ def render_saved_items(user_id: str, request_id: str) -> None:
 
 
 # ------------------------------------------------------------
-# Header / product positioning
+# Shared marketplace brand. Streamlit renders the page navigation in its top bar.
 # ------------------------------------------------------------
 
 st.markdown(
@@ -726,37 +726,16 @@ st.markdown(
         Marketplace online
       </div>
     </div>
-
-    <section class="shipp-hero">
-      <div class="shipp-eyebrow">AI-assisted household marketplace</div>
-      <h1>Give useful household items a second life.</h1>
-      <p>
-        Give away household items you no longer need, or find trusted matches
-        near you. SHIPP combines route-aware matching with an AI advisor that
-        can explain and help you save the best option.
-      </p>
-    </section>
     """,
     unsafe_allow_html=True,
 )
-
-st.markdown("## What would you like to do?")
-
-persona = st.radio(
-    "Choose your marketplace journey",
-    ["Give an item", "Find an item"],
-    horizontal=True,
-    label_visibility="collapsed",
-)
-
-render_deployment_evidence()
-
 
 # ============================================================
 # DONOR JOURNEY
 # ============================================================
 
-if persona == "Give an item":
+def render_donor():
+    render_deployment_evidence()
     st.markdown("### Give an item")
     st.caption(
         "Create a clear listing with photos, item details, pickup location, "
@@ -964,7 +943,8 @@ if persona == "Give an item":
 # REQUESTER JOURNEY
 # ============================================================
 
-else:
+def render_requester():
+    render_deployment_evidence()
     st.markdown("### Find an item")
     st.caption(
         "Choose an existing need or create a new one, then browse trusted "
@@ -1623,6 +1603,121 @@ else:
                         )
                         st.json(trace)
 
+
+
+# ------------------------------------------------------------
+# Public-in-app catalog views — operational state from Lakebase, not Gold.
+# These views do not impersonate a donor/requester or authorize Agent writes.
+# ------------------------------------------------------------
+
+CATALOG_PAGE_SIZE = 9
+
+
+def render_home() -> None:
+    st.markdown(
+        """
+        <section class="shipp-hero">
+          <div class="shipp-eyebrow">AI-assisted household marketplace</div>
+          <h1>Give useful household items a second life.</h1>
+          <p>Explore real household items offered by donors. For request-specific
+          recommendations, use Find an item and SHIPP's trusted matching engine.</p>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown("## Recently available items")
+    st.caption("Live, non-expired donor listings from Lakebase. These are not personalized matches.")
+    try:
+        listings = marketplace.list_available_listings(limit=6)
+    except Exception:
+        st.error("The marketplace catalog is temporarily unavailable.")
+        return
+    render_listing_gallery(
+        listings,
+        empty_message="No available donor items yet. Check back after the next donation.",
+        key_prefix="home",
+    )
+    if st.button("Browse all available items", key="home_browse", type="primary"):
+        st.switch_page(EXPLORE_PAGE)
+    st.caption("To donate, choose Give an item above. To find recommendations, choose Find an item.")
+
+
+def render_explore() -> None:
+    st.markdown("## Explore donor items")
+    st.caption("Search current Lakebase listings. Filters apply before pagination; only AVAILABLE, non-expired items appear.")
+    search_col, category_col, condition_col = st.columns([2, 1, 1])
+    with search_col:
+        query = st.text_input("Search title or description", key="catalog_query",
+                              placeholder="e.g. wooden dining table")
+    with category_col:
+        category = st.selectbox("Category", ["All categories", *CATEGORIES],
+                                key="catalog_category")
+    with condition_col:
+        condition = st.selectbox("Condition", ["All conditions", *CONDITIONS],
+                                 key="catalog_condition")
+
+    # Changing the filters always returns to page 1; no stale offsets.
+    signature = (query.strip(), category, condition)
+    if st.session_state.get("_catalog_filter_signature") != signature:
+        st.session_state["_catalog_filter_signature"] = signature
+        st.session_state["catalog_page"] = 0
+
+    page = max(0, int(st.session_state.get("catalog_page", 0)))
+    try:
+        records = marketplace.list_available_listings(
+            limit=CATALOG_PAGE_SIZE + 1,
+            offset=page * CATALOG_PAGE_SIZE,
+            query=query,
+            category=None if category == "All categories" else category,
+            condition=None if condition == "All conditions" else condition,
+        )
+    except Exception:
+        st.error("Could not retrieve donor listings. Try again later.")
+        return
+
+    visible = records[:CATALOG_PAGE_SIZE]
+    has_next = len(records) > CATALOG_PAGE_SIZE
+    if page and not visible:
+        st.session_state["catalog_page"] = page - 1
+        st.rerun()
+    st.caption(f"Showing page {page + 1}; {len(visible)} item(s) on this page.")
+    render_listing_gallery(
+        visible,
+        empty_message="No available items match these filters.",
+        key_prefix=f"catalog_{page}",
+    )
+
+    previous_col, next_col = st.columns(2)
+    with previous_col:
+        if st.button("← Previous page", key="catalog_prev", disabled=page == 0):
+            st.session_state["catalog_page"] = page - 1
+            st.rerun()
+    with next_col:
+        if st.button("Next page →", key="catalog_next", disabled=not has_next):
+            st.session_state["catalog_page"] = page + 1
+            st.rerun()
+
+    st.info(
+        "Browsing is not a reservation or Save action. For trusted matches and "
+        "AI recommendations, open Find an item."
+    )
+
+
+# Preserve the existing donor and requester workflows as callable Streamlit
+# pages. No profile dropdown is presented as production authentication.
+HOME_PAGE = st.Page(render_home, title="Home", icon=":material/home:",
+                    url_path="home", default=True)
+EXPLORE_PAGE = st.Page(render_explore, title="Explore", icon=":material/search:",
+                       url_path="explore")
+DONOR_PAGE = st.Page(render_donor, title="Give an item", icon=":material/volunteer_activism:",
+                     url_path="give")
+REQUESTER_PAGE = st.Page(render_requester, title="Find an item", icon=":material/favorite:",
+                         url_path="find")
+active_page = st.navigation(
+    [HOME_PAGE, EXPLORE_PAGE, DONOR_PAGE, REQUESTER_PAGE],
+    position="top",
+)
+active_page.run()
 
 # ------------------------------------------------------------
 # Professional project footer

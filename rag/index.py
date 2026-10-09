@@ -10,9 +10,23 @@ from typing import Callable, Dict, List, Optional
 from config.settings import INDEX_SYNC_POLL_SECONDS, INDEX_SYNC_TIMEOUT_SECONDS
 
 
-def _is_not_found(exc: Exception) -> bool:
-    return type(exc).__name__ in ("NotFound", "ResourceDoesNotExist") or "does not exist" in str(exc).lower() \
-        or "not found" in str(exc).lower()
+def _is_not_found(exc: Exception, *, resource_type: str, name: str) -> bool:
+    """Only classify an explicit NotFound for the resource we queried.
+
+    A get_index() call can fail because a *different* resource (such as the
+    index's backing AI Search endpoint) is missing. In that case, assuming the
+    index is absent would incorrectly attempt to create its existing UC name.
+    Ambiguous errors fail closed rather than triggering resource creation.
+    """
+    if type(exc).__name__ not in ("NotFound", "ResourceDoesNotExist"):
+        return False
+
+    message = str(exc).casefold()
+    return (
+        any(phrase in message for phrase in ("not found", "does not exist", "doesn't exist"))
+        and resource_type.casefold() in message
+        and name.casefold() in message
+    )
 
 
 def endpoint_state(w, name: str) -> Optional[str]:
@@ -20,7 +34,7 @@ def endpoint_state(w, name: str) -> Optional[str]:
     try:
         e = w.vector_search_endpoints.get_endpoint(endpoint_name=name)
     except Exception as exc:  # noqa: BLE001 - SDK error classes differ between versions
-        if _is_not_found(exc):
+        if _is_not_found(exc, resource_type="endpoint", name=name):
             return None
         raise
     state = e.endpoint_status.state if e.endpoint_status else None
@@ -44,8 +58,15 @@ def index_status(w, index_name: str) -> Optional[Dict]:
     try:
         idx = w.vector_search_indexes.get_index(index_name=index_name)
     except Exception as exc:  # noqa: BLE001
-        if _is_not_found(exc):
+        if _is_not_found(exc, resource_type="index", name=index_name):
             return None
+        if type(exc).__name__ in ("NotFound", "ResourceDoesNotExist"):
+            raise RuntimeError(
+                f"Cannot inspect AI Search index {index_name!r}: the API reports "
+                "a different or ambiguous missing resource (possibly its backing "
+                "endpoint). Do not create a replacement index; inspect the "
+                "existing Unity Catalog index and its serving endpoint."
+            ) from exc
         raise
     s = idx.status
     return {

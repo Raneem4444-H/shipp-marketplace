@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shipp — Sign up</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="auth">
+  <aside class="auth-side">
+    <a class="brand" href="index.html">Ship<span>p</span></a>
+    <div>
+      <h1>Join in under a minute.</h1>
+      <p>Pick the role you're starting with. A donor can become a requester later, and the other way round.</p>
+    </div>
+    <small>Capstone demo build</small>
+  </aside>
+
+  <main class="auth-main">
+    <form class="auth-form" id="signupForm" novalidate>
+      <h2>Create your account</h2>
+      <p class="sub">I'm new, and I want to sign up as…</p>
+
+      <fieldset>
+        <legend>Role</legend>
+        <div class="roles">
+          <label class="role"><input type="radio" name="role" value="DONOR" checked>
+            <span><b>Donor</b><em>I'm leaving and have items</em></span></label>
+          <label class="role"><input type="radio" name="role" value="REQUESTER">
+            <span><b>Requester</b><em>I'm arriving and need items</em></span></label>
+          <label class="role"><input type="radio" name="role" value="SHIPPING_PARTNER">
+            <span><b>Delivery company</b><em>We pick up and deliver</em></span></label>
+        </div>
+      </fieldset>
+
+      <label class="field"><span id="nameLabel">Full name</span>
+        <input id="name" name="name" autocomplete="name" required>
+      </label>
+
+      <label class="field">City
+        <input id="city" name="city" autocomplete="address-level2" placeholder="e.g. Abu Dhabi" required>
+      </label>
+
+      <p class="error" id="error" role="alert"></p>
+      <button class="btn block" type="submit">Create account</button>
+      <p class="alt">Already have an account? <a href="index.html">Log in</a></p>
+    </form>
+
+    <div class="auth-form hidden" id="done">
+      <h2>You're in.</h2>
+      <p class="sub">Keep this user ID. You'll use it to log in.</p>
+      <div class="panel"><strong id="newId"></strong></div>
+      <a class="btn block" id="goBtn" href="listings.html">Go to Shipp</a>
+    </div>
+  </main>
+</div>
+
+<script>
+  var nameLabel = document.getElementById('nameLabel');
+  document.querySelectorAll('input[name="role"]').forEach(function (r) {
+    r.addEventListener('change', function () {
+      nameLabel.textContent = r.value === 'SHIPPING_PARTNER' ? 'Company name' : 'Full name';
+    });
+  });
+
+  document.getElementById('signupForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var name = document.getElementById('name').value.trim();
+    var city = document.getElementById('city').value.trim();
+    var role = document.querySelector('input[name="role"]:checked').value;
+    if (!name || !city) {
+      document.getElementById('error').textContent = 'Please fill in both fields.';
+      return;
+    }
+
+    var prefix = { DONOR: 'donor', REQUESTER: 'requester', SHIPPING_PARTNER: 'partner' }[role];
+    var userId = prefix + '-' + Math.random().toString(36).slice(2, 10);
+
+    // To make it real, this is the Lakebase write (same shape as your QA insert):
+    //   INSERT INTO shipp.users (user_id, name, current_city, is_active)
+    //   VALUES (:userId, :name, :city, TRUE);
+    //   INSERT INTO shipp.user_roles (user_id, role_id) VALUES (:userId, :role);
+    // Both in one transaction. Nothing is stored by this demo page.
+
+    document.getElementById('newId').textContent = userId;
+    var q = new URLSearchParams({ user: userId, role: role, name: name, city: city });
+    document.getElementById('goBtn').href = 'listings.html?' + q.toString();
+    document.getElementById('signupForm').classList.add('hidden');
+    document.getElementById('done').classList.remove('hidden');
+  });
+</script>
+</body>
+</html>

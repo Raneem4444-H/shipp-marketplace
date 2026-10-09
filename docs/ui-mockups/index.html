@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shipp — Log in</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="auth">
+  <aside class="auth-side">
+    <a class="brand" href="index.html">Ship<span>p</span></a>
+    <div>
+      <h1>Leaving furniture finds an arriving home.</h1>
+      <p>Expats moving out list what they can't take. Expats moving in ask for what they need. Shipp matches the two.</p>
+    </div>
+    <small>Capstone demo build</small>
+  </aside>
+
+  <main class="auth-main">
+    <form class="auth-form" id="loginForm" novalidate>
+      <h2>Log in</h2>
+      <p class="sub">Enter your user ID and choose how you're using Shipp today.</p>
+
+      <label class="field">User ID
+        <input id="userId" name="userId" autocomplete="username" placeholder="e.g. demo-requester-001" required>
+      </label>
+
+      <fieldset>
+        <legend>I am a…</legend>
+        <div class="roles">
+          <label class="role"><input type="radio" name="role" value="DONOR" checked>
+            <span><b>Donor</b><em>I have items to give</em></span></label>
+          <label class="role"><input type="radio" name="role" value="REQUESTER">
+            <span><b>Requester</b><em>I need items</em></span></label>
+          <label class="role"><input type="radio" name="role" value="SHIPPING_PARTNER">
+            <span><b>Delivery company</b><em>I move items</em></span></label>
+        </div>
+      </fieldset>
+
+      <p class="error" id="error" role="alert"></p>
+      <button class="btn block" type="submit">Continue</button>
+      <p class="alt">New to Shipp? <a href="signup.html">Create an account</a></p>
+    </form>
+  </main>
+</div>
+
+<script>
+  // Demo login: no password, because shipp.users has no credential column
+  // and identity verification is outside P0 (spec §5.11).
+  // To make it real: look up user_id in shipp.users and confirm the chosen
+  // role exists for that user in shipp.user_roles before continuing.
+  document.getElementById('loginForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var userId = document.getElementById('userId').value.trim();
+    var role = document.querySelector('input[name="role"]:checked').value;
+    if (!userId) {
+      document.getElementById('error').textContent = 'Please enter your user ID.';
+      return;
+    }
+    var q = new URLSearchParams({ user: userId, role: role });
+    window.location.href = 'listings.html?' + q.toString();
+  });
+</script>
+</body>
+</html>

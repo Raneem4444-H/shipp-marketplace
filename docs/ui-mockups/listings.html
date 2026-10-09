@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shipp — Listings</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="index.html">Ship<span>p</span></a>
+  <div class="who">
+    <span id="whoName"></span>
+    <span class="pill" id="whoRole"></span>
+    <a class="btn ghost" href="index.html">Log out</a>
+  </div>
+</header>
+
+<main class="page">
+  <div class="page-head">
+    <div>
+      <h1 id="title"></h1>
+      <p id="subtitle"></p>
+    </div>
+    <button class="btn hidden" id="newBtn" type="button">+ New listing</button>
+  </div>
+
+  <!-- Donor: create listing (spec §5.1) -->
+  <form class="panel hidden" id="newForm" novalidate>
+    <h2>New listing</h2>
+    <div class="two">
+      <label class="field">Title <input id="fTitle" required></label>
+      <label class="field">Location <input id="fLocation" placeholder="e.g. Abu Dhabi" required></label>
+      <label class="field">Category
+        <select id="fCategory">
+          <option>FURNITURE</option><option>APPLIANCES</option><option>KITCHEN</option><option>ELECTRONICS</option><option>OTHER</option>
+        </select>
+      </label>
+      <label class="field">Condition
+        <select id="fCondition">
+          <option>LIKE_NEW</option><option selected>GOOD</option><option>FAIR</option>
+        </select>
+      </label>
+      <label class="field">Available from <input id="fFrom" type="date" required></label>
+      <label class="field">Available until <input id="fUntil" type="date" required></label>
+    </div>
+    <label class="field">Description <textarea id="fDesc" rows="3"></textarea></label>
+    <p class="error" id="formError" role="alert"></p>
+    <button class="btn" type="submit">Publish listing</button>
+    <button class="btn ghost" type="button" id="cancelBtn">Cancel</button>
+  </form>
+
+  <div class="filters" id="filters">
+    <input id="search" type="search" placeholder="Search listings" aria-label="Search listings">
+    <select id="condFilter" aria-label="Condition">
+      <option value="">Any condition</option>
+      <option>LIKE_NEW</option><option>GOOD</option><option>FAIR</option>
+    </select>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <!-- Delivery company: simulated jobs (Shipping Partner is P1 in the spec) -->
+  <div class="hidden" id="jobs">
+    <table>
+      <thead><tr><th>Item</th><th>Pickup</th><th>Drop-off</th><th>Distance</th><th></th></tr></thead>
+      <tbody id="jobRows"></tbody>
+    </table>
+    <p class="note">Simulated jobs. In the pipeline these would come from saved items joined to route distance in Gold.</p>
+  </div>
+</main>
+
+<script>
+  var params = new URLSearchParams(window.location.search);
+  var role = params.get('role') || 'REQUESTER';
+  var userId = params.get('user') || 'guest';
+  var displayName = params.get('name') || userId;
+
+  // Sample rows shaped like shipp.listings. Replace with a read from Lakebase.
+  var listings = [
+    { listing_id: 'demo-listing-001', donor_id: 'demo-donor-001', title: 'Wooden Dining Table', description: 'Solid wooden dining table available for a household that needs it.', category: 'FURNITURE', condition: 'GOOD', location: 'Abu Dhabi', available_until: '2026-11-15', status: 'AVAILABLE' },
+    { listing_id: 'demo-listing-002', donor_id: 'demo-donor-001', title: 'Dining Chairs Set', description: 'Set of four dining chairs available for a household that needs them.', category: 'FURNITURE', condition: 'GOOD', location: 'Abu Dhabi', available_until: '2026-11-15', status: 'AVAILABLE' },
+    { listing_id: 'e91598f2', donor_id: 'donor-a', title: 'Teak chairs (set of 4)', description: 'Finish is worn after a year of use, but a quick polish will bring it back. Otherwise in excellent shape.', category: 'FURNITURE', condition: 'GOOD', location: 'Dubai', available_until: '2026-10-30', status: 'AVAILABLE' },
+    { listing_id: '852736a6', donor_id: 'donor-b', title: 'Wood table', description: 'Good brown table, ready to use.', category: 'FURNITURE', condition: 'LIKE_NEW', location: 'Abu Dhabi', available_until: '2026-11-01', status: 'AVAILABLE' },
+    { listing_id: 'c44920e7', donor_id: 'donor-c', title: 'Wooden table', description: 'Good table with a simple design.', category: 'FURNITURE', condition: 'LIKE_NEW', location: 'Sharjah', available_until: '2026-11-20', status: 'AVAILABLE' }
+  ];
+  var saved = {};
+
+  var roleNames = { DONOR: 'Donor', REQUESTER: 'Requester', SHIPPING_PARTNER: 'Delivery company' };
+  document.getElementById('whoName').textContent = displayName;
+  document.getElementById('whoRole').textContent = roleNames[role] || role;
+
+  var grid = document.getElementById('grid');
+  var search = document.getElementById('search');
+  var condFilter = document.getElementById('condFilter');
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  function render() {
+    var term = search.value.trim().toLowerCase();
+    var cond = condFilter.value;
+    var rows = listings.filter(function (l) {
+      if (role === 'DONOR' && l.donor_id !== userId) return false;
+      if (role === 'REQUESTER' && l.status !== 'AVAILABLE') return false;
+      if (cond && l.condition !== cond) return false;
+      if (term && (l.title + ' ' + l.description + ' ' + l.location).toLowerCase().indexOf(term) === -1) return false;
+      return true;
+    });
+
+    grid.textContent = '';
+    if (!rows.length) {
+      grid.appendChild(el('div', 'empty', role === 'DONOR'
+        ? 'You have no listings yet. Use "New listing" to post your first item.'
+        : 'No listings match your search.'));
+      return;
+    }
+
+    rows.forEach(function (l) {
+      var card = el('article', 'item');
+      var tags = el('div', 'tags');
+      tags.appendChild(el('span', 'tag', l.category));
+      tags.appendChild(el('span', 'tag', l.condition.replace('_', ' ')));
+      tags.appendChild(el('span', 'tag status', l.status));
+      card.appendChild(tags);
+      card.appendChild(el('h3', null, l.title));
+      card.appendChild(el('p', null, l.description));
+      card.appendChild(el('div', 'meta', l.location + ' · available until ' + l.available_until));
+
+      if (role === 'REQUESTER') {
+        var b = el('button', saved[l.listing_id] ? 'btn done' : 'btn', saved[l.listing_id] ? 'Saved' : 'Save item');
+        b.type = 'button';
+        b.addEventListener('click', function () {
+          // Real path: the Agent's save_item() checks listing status in
+          // Lakebase, then writes shipp.saved_items and shipp.agent_activity.
+          saved[l.listing_id] = true;   // one save per listing (spec §10.3)
+          render();
+        });
+        card.appendChild(b);
+      }
+      grid.appendChild(card);
+    });
+  }
+
+  // Role-specific page setup
+  if (role === 'DONOR') {
+    document.getElementById('title').textContent = 'My listings';
+    document.getElementById('subtitle').textContent = 'Items you have posted for arriving expats.';
+    document.getElementById('newBtn').classList.remove('hidden');
+  } else if (role === 'SHIPPING_PARTNER') {
+    document.getElementById('title').textContent = 'Delivery jobs';
+    document.getElementById('subtitle').textContent = 'Saved items waiting for pickup and delivery.';
+    document.getElementById('filters').classList.add('hidden');
+    grid.classList.add('hidden');
+    document.getElementById('jobs').classList.remove('hidden');
+    var jobs = [
+      ['Wooden Dining Table', 'Abu Dhabi', 'Dubai', '139 km'],
+      ['Dining Chairs Set', 'Abu Dhabi', 'Abu Dhabi', '12 km'],
+      ['Teak chairs (set of 4)', 'Dubai', 'Sharjah', '28 km']
+    ];
+    var tbody = document.getElementById('jobRows');
+    jobs.forEach(function (j) {
+      var tr = document.createElement('tr');
+      j.forEach(function (c) { tr.appendChild(el('td', null, c)); });
+      var td = document.createElement('td');
+      var b = el('button', 'btn ghost', 'Accept');
+      b.type = 'button';
+      b.addEventListener('click', function () { b.textContent = 'Accepted'; b.className = 'btn done'; b.disabled = true; });
+      td.appendChild(b); tr.appendChild(td); tbody.appendChild(tr);
+    });
+  } else {
+    document.getElementById('title').textContent = 'Available listings';
+    document.getElementById('subtitle').textContent = 'Items donors are giving away. Save the ones you want.';
+  }
+
+  // Donor: new listing form
+  var form = document.getElementById('newForm');
+  document.getElementById('newBtn').addEventListener('click', function () { form.classList.remove('hidden'); document.getElementById('fTitle').focus(); });
+  document.getElementById('cancelBtn').addEventListener('click', function () { form.classList.add('hidden'); });
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var t = document.getElementById('fTitle').value.trim();
+    var loc = document.getElementById('fLocation').value.trim();
+    var from = document.getElementById('fFrom').value;
+    var until = document.getElementById('fUntil').value;
+    var err = document.getElementById('formError');
+    if (!t || !loc || !from || !until) { err.textContent = 'Title, location and both dates are required.'; return; }
+    if (until < from) { err.textContent = '"Available until" must be on or after "Available from".'; return; }
+    err.textContent = '';
+    // Real path: INSERT INTO shipp.listings (...) with status 'AVAILABLE';
+    // CDC then carries it to Bronze, Silver, Gold and the search index.
+    listings.unshift({
+      listing_id: 'new-' + Date.now(), donor_id: userId, title: t,
+      description: document.getElementById('fDesc').value.trim(),
+      category: document.getElementById('fCategory').value,
+      condition: document.getElementById('fCondition').value,
+      location: loc, available_until: until, status: 'AVAILABLE'
+    });
+    form.reset(); form.classList.add('hidden'); render();
+  });
+
+  search.addEventListener('input', render);
+  condFilter.addEventListener('change', render);
+  if (role !== 'SHIPPING_PARTNER') render();
+</script>
+</body>
+</html>

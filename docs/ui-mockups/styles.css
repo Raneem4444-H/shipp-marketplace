@@ -1,0 +1,137 @@
+:root {
+  --ink: #12343b;
+  --ink-soft: #4a6166;
+  --sand: #f6f1e7;
+  --card: #fffdf9;
+  --line: #e3dccd;
+  --accent: #d95f43;
+  --accent-dark: #b94a31;
+  --ok: #2f7d5b;
+  --radius: 14px;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: var(--ink);
+  background: var(--sand);
+  line-height: 1.5;
+}
+h1, h2, h3 { font-family: Georgia, "Times New Roman", serif; margin: 0; letter-spacing: -0.01em; }
+a { color: var(--accent-dark); }
+
+.brand { font-family: Georgia, serif; font-size: 1.5rem; font-weight: 700; color: var(--ink); text-decoration: none; }
+.brand span { color: var(--accent); }
+
+/* Auth pages */
+.auth {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+}
+.auth-side {
+  background: var(--ink);
+  color: #f6f1e7;
+  padding: 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.auth-side .brand { color: #f6f1e7; }
+.auth-side h1 { font-size: 2.4rem; line-height: 1.15; margin-bottom: 16px; }
+.auth-side p { color: #c5d2d0; max-width: 34ch; margin: 0; }
+.auth-side small { color: #8fa5a3; }
+.auth-main { padding: 48px 24px; display: flex; align-items: center; justify-content: center; }
+.auth-form { width: 100%; max-width: 460px; }
+.auth-form h2 { font-size: 1.7rem; margin-bottom: 6px; }
+.auth-form .sub { color: var(--ink-soft); margin: 0 0 28px; }
+
+label.field { display: block; margin-bottom: 18px; font-weight: 600; font-size: 0.9rem; }
+label.field input, label.field select, label.field textarea {
+  display: block; width: 100%; margin-top: 6px;
+  padding: 11px 13px; font: inherit; color: var(--ink);
+  background: var(--card); border: 1.5px solid var(--line); border-radius: 10px;
+}
+label.field input:focus, label.field select:focus, label.field textarea:focus {
+  outline: 3px solid rgba(217, 95, 67, 0.25); border-color: var(--accent);
+}
+fieldset { border: 0; padding: 0; margin: 0 0 22px; }
+legend { font-weight: 600; font-size: 0.9rem; margin-bottom: 8px; padding: 0; }
+
+.roles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.role input { position: absolute; opacity: 0; }
+.role span {
+  display: block; height: 100%;
+  padding: 14px 12px; text-align: center; cursor: pointer;
+  background: var(--card); border: 1.5px solid var(--line); border-radius: 12px;
+}
+.role b { display: block; font-size: 0.95rem; }
+.role em { display: block; font-style: normal; font-size: 0.78rem; color: var(--ink-soft); margin-top: 2px; }
+.role input:checked + span { border-color: var(--accent); background: #fdeee9; }
+.role input:focus-visible + span { outline: 3px solid rgba(217, 95, 67, 0.35); }
+
+.btn {
+  display: inline-block; padding: 11px 20px; font: inherit; font-weight: 600;
+  color: #fff; background: var(--accent); border: 0; border-radius: 10px;
+  cursor: pointer; text-decoration: none;
+}
+.btn:hover { background: var(--accent-dark); }
+.btn.block { width: 100%; }
+.btn.ghost { background: transparent; color: var(--ink); border: 1.5px solid var(--line); }
+.btn.ghost:hover { background: #efe8da; }
+.btn.done { background: var(--ok); }
+.alt { margin-top: 20px; color: var(--ink-soft); font-size: 0.92rem; }
+.error { color: #a3281a; font-size: 0.88rem; min-height: 1.3em; margin: 0 0 10px; }
+.hidden { display: none !important; }
+
+/* App pages */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 14px 28px; background: var(--card); border-bottom: 1px solid var(--line);
+}
+.who { display: flex; align-items: center; gap: 12px; font-size: 0.92rem; }
+.pill {
+  padding: 3px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 700;
+  letter-spacing: 0.04em; background: var(--ink); color: #fff;
+}
+.page { max-width: 1100px; margin: 0 auto; padding: 32px 24px 64px; }
+.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+.page-head h1 { font-size: 1.9rem; }
+.page-head p { margin: 4px 0 0; color: var(--ink-soft); }
+.filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 22px; }
+.filters input, .filters select {
+  padding: 9px 12px; font: inherit; color: var(--ink);
+  background: var(--card); border: 1.5px solid var(--line); border-radius: 10px;
+}
+.filters input { flex: 1; min-width: 200px; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px; }
+.item {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 18px; display: flex; flex-direction: column; gap: 10px;
+}
+.item h3 { font-size: 1.15rem; }
+.item p { margin: 0; color: var(--ink-soft); font-size: 0.92rem; flex: 1; }
+.tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.tag { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; padding: 3px 8px; border-radius: 6px; background: #ece5d6; }
+.tag.status { background: #dcefe6; color: var(--ok); }
+.meta { font-size: 0.82rem; color: var(--ink-soft); }
+.empty { padding: 40px; text-align: center; color: var(--ink-soft); background: var(--card); border: 1px dashed var(--line); border-radius: var(--radius); }
+
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; margin-bottom: 24px; }
+.panel h2 { font-size: 1.25rem; margin-bottom: 14px; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+
+table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); font-size: 0.92rem; }
+th { font-size: 0.75rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-soft); }
+tr:last-child td { border-bottom: 0; }
+.note { font-size: 0.85rem; color: var(--ink-soft); margin-top: 12px; }
+
+@media (max-width: 780px) {
+  .auth { grid-template-columns: 1fr; }
+  .auth-side { padding: 28px 24px; gap: 24px; }
+  .auth-side h1 { font-size: 1.7rem; }
+  .roles, .two { grid-template-columns: 1fr; }
+  .topbar { padding: 12px 16px; }
+}

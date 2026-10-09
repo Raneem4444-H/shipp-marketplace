@@ -35,7 +35,6 @@ Runtime behavior, thresholds, model endpoints, API settings, scoring weights,
 timeouts, and other tunable configuration belong in `config/settings.py`.
 """
 
-
 # =============================================================================
 # Unity Catalog namespaces
 # =============================================================================
@@ -330,10 +329,11 @@ PIPELINE_RUN_LOG = (
 # Delta Sync AI Search index built from GOLD_LISTING_SEARCH_DOCS.
 #
 # This is a Databricks AI Search resource, NOT a Delta table.
-VS_INDEX_NAME = (
-    f"{CATALOG}.{GOLD_SCHEMA}.gold_listing_search_docs_index"
-)
 
+
+VS_INDEX_NAME = (
+    f"{CATALOG}.{GOLD_SCHEMA}.gold_listing_search_docs_index_v2"
+)
 
 # =============================================================================
 # Convenience registry — Delta tables only

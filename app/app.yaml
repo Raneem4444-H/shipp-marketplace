@@ -1,6 +1,9 @@
 cat > app/app.yaml <<'YAML'
 command: ['streamlit', 'run', 'app.py']
 
+VS_INDEX_NAME = (
+    f"{CATALOG}.{GOLD_SCHEMA}.gold_listing_search_docs_index_v2"
+)
 env:
   - name: SHIPP_LLM_ENDPOINT
     valueFrom: serving-endpoint
@@ -22,4 +25,10 @@ env:
 
   - name: STREAMLIT_GATHER_USAGE_STATS
     value: 'false'
+  
+  - name: SHIPP_SEARCH_INDEX
+    valueFrom: vector-search-index
+
+  
 YAML
+

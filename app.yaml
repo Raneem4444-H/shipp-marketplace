@@ -21,3 +21,6 @@ env:
 
   - name: SHIPP_LISTING_IMAGE_VOLUME
     value: /Volumes/bootcamp_students/shipp_bronze/listing_images
+    
+  - name: SHIPP_DEPLOYMENT_TARGET
+    value: databricks_app

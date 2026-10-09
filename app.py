@@ -1414,16 +1414,36 @@ else:
                         type="primary",
                         use_container_width=True,
                     ):
-                        run_agent_turn(
-                            user_id=user_id,
-                            request_id=request_id,
-                            prompt=(
-                                f"Evaluate candidate listing {match.listing_id}. "
-                                "Use trusted Gold data, semantic context, and the "
-                                "current Lakebase listing status. If it is suitable "
-                                "and available, propose saving it."
-                            ),
-                        )
+                        try:
+                            with st.spinner(
+                                "Checking trusted match and current availability..."
+                            ):
+                                review = agent.review_for_save(
+                                    user_id=user_id,
+                                    request_id=request_id,
+                                    listing_id=match.listing_id,
+                                )
+                            st.session_state.pending_save = review.pending_save
+                            st.session_state.tool_trace = review.tool_trace
+                            st.session_state.messages.append(
+                                {"role": "assistant", "content": review.reply}
+                            )
+                            st.session_state.last_agent_read_tools = sorted(
+                                {
+                                    str(trace.get("tool", ""))
+                                    for trace in review.tool_trace
+                                    if str(trace.get("tool", ""))
+                                    in {
+                                        "get_candidate_matches",
+                                        "search_listing_context",
+                                        "get_listing_status",
+                                    }
+                                }
+                            )
+                        except Exception as exc:
+                            st.session_state.pending_save = None
+                            st.error("Review could not be completed.")
+                            st.code(str(exc))
                         st.rerun()
 
         st.markdown("---")

@@ -136,6 +136,126 @@ class ShippAgent:
             min_score=self._settings.min_match_score,
         )
 
+    def review_for_save(
+        self,
+        *,
+        user_id: str,
+        request_id: str,
+        listing_id: str,
+    ) -> AgentTurn:
+        """Prepare a user-confirmable proposal with deterministic, audited reads.
+
+        A UI action must not rely on the chat model choosing propose_save
+        with tool_choice="auto". This method never writes to saved_items;
+        confirm_save remains the sole user-approved write boundary.
+        """
+        request = self._lakebase.get_request(request_id)
+        refusal = check_request_usable(request, user_id)
+        if refusal is not None:
+            return AgentTurn(reply=refusal)
+
+        toolbox = ToolBox(
+            ToolContext(user_id=user_id, request_id=request_id),
+            self._settings,
+            self._gold,
+            self._search,
+            self._lakebase,
+        )
+        trace: list[dict[str, Any]] = []
+
+        def audited_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+            raw_arguments = json.dumps(arguments)
+            result = toolbox.dispatch(name, raw_arguments)
+            trace.append({
+                "tool": name,
+                "arguments": raw_arguments,
+                "result": result,
+            })
+            return result
+
+        candidates_result = audited_tool("get_candidate_matches", {})
+        if "error" in candidates_result:
+            return AgentTurn(
+                reply="Trusted matches could not be checked. Please try again.",
+                tool_trace=trace,
+            )
+
+        selected = next(
+            (
+                item
+                for item in candidates_result.get("matches", [])
+                if item.get("listing_id") == listing_id
+            ),
+            None,
+        )
+        if selected is None:
+            return AgentTurn(
+                reply="This listing is not among the current trusted matches for your request.",
+                tool_trace=trace,
+            )
+
+        status_result = audited_tool(
+            "get_listing_status", {"listing_id": listing_id}
+        )
+        if status_result.get("can_be_saved") is not True:
+            return AgentTurn(
+                reply=(
+                    status_result.get("reason")
+                    or status_result.get("error")
+                    or "The listing's availability could not be confirmed."
+                ),
+                tool_trace=trace,
+            )
+
+        semantic_result = audited_tool(
+            "search_listing_context",
+            {"query": selected.get("title") or "household item"},
+        )
+        if "error" in semantic_result:
+            return AgentTurn(
+                reply=(
+                    "Semantic listing context is temporarily unavailable. "
+                    "No proposal was created; please try again."
+                ),
+                tool_trace=trace,
+            )
+
+        score = float(selected["match_score"])
+        reason = (
+            f"Trusted Gold match score: {score * 100:.1f}%. "
+            "Lakebase confirmed the listing is currently available."
+        )
+        if selected.get("distance_km") is not None:
+            reason += (
+                f" Route distance: {float(selected['distance_km']):.1f} km."
+            )
+
+        proposal_result = audited_tool(
+            "propose_save", {"listing_id": listing_id, "reason": reason}
+        )
+        if (
+            proposal_result.get("proposal_created") is True
+            and toolbox.pending_save is not None
+        ):
+            return AgentTurn(
+                reply=(
+                    "I checked the trusted match, semantic context, and "
+                    "current availability. Review the proposal below; "
+                    "nothing has been saved yet."
+                ),
+                pending_save=toolbox.pending_save,
+                tool_trace=trace,
+            )
+
+        return AgentTurn(
+            reply=(
+                proposal_result.get("reason")
+                or proposal_result.get("error")
+                or "A save proposal could not be created."
+            ),
+            tool_trace=trace,
+        )
+
     # ------------------------------------------------------------------
     # CHAT / READ PATH
     # ------------------------------------------------------------------

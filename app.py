@@ -303,6 +303,7 @@ defaults = {
     "last_save_status": None,
     "last_saved_refresh_pass": None,
     "last_agent_read_tools": [],
+    "review_error": None,
     "donor_lat": 24.4976,
     "donor_lon": 54.4075,
     "requester_lat": 24.5014,
@@ -1394,16 +1395,47 @@ def render_requester():
                         type="primary",
                         use_container_width=True,
                     ):
-                        run_agent_turn(
-                            user_id=user_id,
-                            request_id=request_id,
-                            prompt=(
-                                f"Evaluate candidate listing {match.listing_id}. "
-                                "Use trusted Gold data, semantic context, and the "
-                                "current Lakebase listing status. If it is suitable "
-                                "and available, propose saving it."
-                            ),
-                        )
+                        try:
+                            with st.spinner(
+                                "Checking trusted match and current availability..."
+                            ):
+                                review = agent.review_for_save(
+                                    user_id=user_id,
+                                    request_id=request_id,
+                                    listing_id=match.listing_id,
+                                )
+                            st.session_state.pending_save = review.pending_save
+                            st.session_state.review_error = None
+                            st.session_state.tool_trace = review.tool_trace
+                            st.session_state.messages.append(
+                                {"role": "assistant", "content": review.reply}
+                            )
+                            st.session_state.last_agent_read_tools = sorted(
+                                {
+                                    str(trace.get("tool", ""))
+                                    for trace in review.tool_trace
+                                    if str(trace.get("tool", ""))
+                                    in {
+                                        "get_candidate_matches",
+                                        "search_listing_context",
+                                        "get_listing_status",
+                                    }
+                                }
+                            )
+                        except Exception as exc:
+                            st.session_state.pending_save = None
+                            st.session_state.tool_trace = []
+                            st.session_state.messages.append(
+                                {
+                                    "role": "assistant",
+                                    "content": (
+                                        "Review could not be completed. "
+                                        "Please retry, or ask the administrator "
+                                        "to inspect the App logs."
+                                    ),
+                                }
+                            )
+                            st.session_state.review_error = str(exc)
                         st.rerun()
 
         st.markdown("---")
@@ -1564,6 +1596,10 @@ def render_requester():
                             "write was performed."
                         )
                         st.code(str(exc))
+
+        if st.session_state.review_error:
+            st.error("Technical review error (admin diagnostics):")
+            st.code(st.session_state.review_error)
 
         if st.session_state.tool_trace:
             tool_names = [

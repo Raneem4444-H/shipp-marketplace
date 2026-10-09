@@ -35,10 +35,10 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Ruff
-        run: ruff check config data_pipeline rag agent test --select E9,F63,F7,F82
+        run: ruff check app.py app_auth.py app_marketplace.py app_runtime.py config data_pipeline rag agent test --select E9,F63,F7,F82
 
       - name: Bandit
-        run: bandit -q -r config data_pipeline rag agent -x test,tests,notebooks -ll -s B608
+        run: bandit -q -r app.py app_auth.py app_marketplace.py app_runtime.py config data_pipeline rag agent -x test,tests,notebooks -ll -s B608
 
       - name: Unit tests
-        run: pytest -q test/unit
+        run: PYTHONPATH="$PWD:$PWD/agent/agent_ship/src:$PWD/agent/agent_ship/tests/unit/agent" python -m pytest -q test/unit agent/agent_ship/tests/unit/agent

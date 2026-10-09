@@ -41,7 +41,7 @@ def test_no_candidates_tells_model_to_recommend_nothing():
     out = box.dispatch("get_candidate_matches", "{}")
     assert out["matches"] == []
     assert "Recommend nothing" in out["note"]
-    assert lake.activity[-1][1:] == ("get_candidate_matches", "req-1", ActionStatus.SUCCESS)
+    assert lake.activity[-1][1:] == ("get_candidate_matches", "req-1", ActionStatus.NO_MATCH)
 
 
 def test_status_check_on_non_candidate_is_rejected_and_logged():

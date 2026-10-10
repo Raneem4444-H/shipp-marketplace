@@ -30,4 +30,4 @@ if profile is not None:
             else:
                 st.metric("Saved items for this request", len(saved))
                 if saved:
-                    st.dataframe(saved, use_container_width=True, hide_index=True)
+                    st.dataframe(saved, width="stretch", hide_index=True)

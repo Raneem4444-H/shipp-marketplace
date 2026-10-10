@@ -106,7 +106,7 @@ def render_requester():
         if st.button(
             "Create request",
             type="primary",
-            use_container_width=True,
+            width="stretch",
             key="create_request",
         ):
             if not request_text.strip() or not request_location.strip():
@@ -381,7 +381,7 @@ def render_requester():
                     )
 
                     if image_bytes:
-                        st.image(image_bytes, use_container_width=True)
+                        st.image(image_bytes, width="stretch")
 
                     score = float(match.match_score or 0.0)
                     score_percent = score * 100 if score <= 1 else score
@@ -433,7 +433,7 @@ def render_requester():
                     if st.button(
                         "Ask SHIPP",
                         key=f"ask_{match.listing_id}",
-                        use_container_width=True,
+                        width="stretch",
                     ):
                         run_agent_turn(
                             user_id=user_id,
@@ -451,7 +451,7 @@ def render_requester():
                         "Review for save",
                         key=f"review_{match.listing_id}",
                         type="primary",
-                        use_container_width=True,
+                        width="stretch",
                     ):
                         try:
                             with st.spinner(
@@ -505,7 +505,7 @@ def render_requester():
 
         if st.button(
             "Compare my top matches",
-            use_container_width=True,
+            width="stretch",
             key="compare_top_matches",
         ):
             run_agent_turn(
@@ -530,7 +530,7 @@ def render_requester():
             )
             advisor_submitted = st.form_submit_button(
                 "Ask SHIPP",
-                use_container_width=True,
+                width="stretch",
             )
 
         if advisor_submitted and advisor_prompt.strip():
@@ -574,7 +574,7 @@ def render_requester():
             with confirm_left:
                 if st.button(
                     "Cancel",
-                    use_container_width=True,
+                    width="stretch",
                     key="cancel_save",
                 ):
                     st.session_state.pending_save = None
@@ -584,7 +584,7 @@ def render_requester():
                 if st.button(
                     "♡ Save this item",
                     type="primary",
-                    use_container_width=True,
+                    width="stretch",
                     key="confirm_save",
                 ):
                     try:

@@ -42,3 +42,9 @@ jobs:
 
       - name: Unit tests
         run: PYTHONPATH="$PWD:$PWD/agent/agent_ship/src:$PWD/agent/agent_ship/tests/unit/agent" python -m pytest -q test/unit agent/agent_ship/tests/unit/agent
+
+      - name: Compile application modules
+        run: |
+          python -m compileall -q \
+            app.py app_auth.py app_marketplace.py app_runtime.py \
+            ui services repositories

@@ -3,7 +3,6 @@ from __future__ import annotations
 from ui.legacy_core import *  # noqa: F403,F401
 from services.identity_service import require_role
 
-
 def render_requester():
     profile = require_role("REQUESTER")
     if profile is None:
@@ -96,6 +95,8 @@ def render_requester():
         ):
             if not request_text.strip() or not request_location.strip():
                 st.warning("Description and location are required.")
+            elif not st.session_state.get("requester_pin_confirmed", False):
+                st.warning("Select your location on the map first.")
             else:
                 try:
                     new_request_id = marketplace.create_request(
@@ -106,6 +107,11 @@ def render_requester():
                         latitude=requester_lat,
                         longitude=requester_lon,
                         need_by_date=need_by_date,
+                    )
+                    # New requests must use a deliberately chosen pin.
+                    st.session_state["requester_pin_confirmed"] = False
+                    st.session_state["requester_map_version"] = (
+                        st.session_state.get("requester_map_version", 0) + 1
                     )
                     st.session_state.last_created_request_id = new_request_id
                     selected_request_id = new_request_id
@@ -631,7 +637,7 @@ def render_requester():
                             st.session_state.last_save_status = f"REJECTED — {result.status.value}"
                             st.warning(
                                 "SHIPP rechecked the current listing state and "
-                                f"did not save the item: {result.message}"
+                                    f"did not save the item: {result.message}"
                             )
                     except Exception as exc:
                         st.error(

@@ -1,4 +1,3 @@
-
 """SHIPP donor page — publish and manage your own donations."""
 
 from __future__ import annotations
@@ -6,11 +5,10 @@ from __future__ import annotations
 from ui.legacy_core import *  # noqa: F403,F401
 from services.identity_service import require_role
 
-
 def render_donor():
-    # ---------------------------------------------------------
-    # 0. SECURITY — VERIFIED DONOR IDENTITY
-    # ---------------------------------------------------------
+# ---------------------------------------------------------
+# 0. SECURITY — VERIFIED DONOR IDENTITY
+# ---------------------------------------------------------
     profile = require_role("DONOR")
 
     if profile is None:
@@ -231,6 +229,8 @@ def render_donor():
             st.warning(
                 "Add a short description before publishing."
             )
+        elif not st.session_state.get("donor_pin_confirmed", False):
+            st.warning("Select your pickup point on the map first.")
 
         else:
             try:
@@ -248,7 +248,10 @@ def render_donor():
                     longitude=donor_lon,
                     available_until=available_until,
                 )
-
+                st.session_state["donor_pin_confirmed"] = False
+                st.session_state["donor_map_version"] = (
+                    st.session_state.get("donor_map_version", 0) + 1
+                )
                 st.session_state.last_created_listing_id = (
                     listing_id
                 )
@@ -317,6 +320,5 @@ def render_donor():
                     "No duplicate action was attempted."
                 )
                 st.code(str(exc))
-
 
 render_donor()

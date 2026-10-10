@@ -16,7 +16,6 @@ import folium
 import streamlit as st
 from streamlit_folium import st_folium
 
-
 # ------------------------------------------------------------
 # Paths / existing SHIPP Agent package
 # ------------------------------------------------------------
@@ -38,11 +37,9 @@ from app_runtime import (
 from shipp.agent.agent import ShippAgent
 from shipp.agent.clients import build_lakebase_connect, build_workspace_client
 
-
 # ------------------------------------------------------------
 # Page / theme
 # ------------------------------------------------------------
-
 
 # Streamlit Community Cloud stores configuration in st.secrets rather than
 # Databricks App resource bindings. Root-level secrets are already exposed by
@@ -51,13 +48,12 @@ from shipp.agent.clients import build_lakebase_connect, build_workspace_client
 try:
     bootstrap_streamlit_secrets(st.secrets)
 except Exception:
-    # No secrets file is a valid state for Databricks Apps because resources
-    # are injected by the platform. Startup checks below surface real gaps.
+# No secrets file is a valid state for Databricks Apps because resources
+# are injected by the platform. Startup checks below surface real gaps.
     pass
 
 RUNTIME_STATUS = runtime_config_status()
 DEPLOYMENT_TARGET = deployment_target()
-
 
 def load_css() -> None:
     if CSS_PATH.exists():
@@ -66,9 +62,7 @@ def load_css() -> None:
             unsafe_allow_html=True,
         )
 
-
 load_css()
-
 
 # ------------------------------------------------------------
 # Constants / demo-friendly labels
@@ -91,16 +85,13 @@ DEMO_ALIASES = {
     "demo-requester-001": "Kim Stevens",
 }
 
-
 def display_user(row: dict[str, str]) -> str:
     return DEMO_ALIASES.get(row["user_id"], row["name"])
-
 
 def is_agent_fallback(reply: str) -> bool:
     return reply.strip().lower().startswith(
         "i couldn't finish checking the matches"
     )
-
 
 # ------------------------------------------------------------
 # Existing validated platform clients
@@ -110,12 +101,11 @@ def is_agent_fallback(reply: str) -> bool:
 def load_agent() -> ShippAgent:
     return ShippAgent.from_env()
 
-
 @st.cache_resource
 def load_marketplace() -> MarketplaceRepo:
-    # Marketplace startup only needs Databricks auth + Lakebase settings.
-    # Do not require Agent-only config (LLM, SQL warehouse, AI Search)
-    # just to render the frontend or use operational donor/requester flows.
+# Marketplace startup only needs Databricks auth + Lakebase settings.
+# Do not require Agent-only config (LLM, SQL warehouse, AI Search)
+# just to render the frontend or use operational donor/requester flows.
     settings = SimpleNamespace(
         lakebase_schema=os.getenv("SHIPP_LAKEBASE_SCHEMA", "shipp"),
         lakebase_endpoint=(
@@ -136,7 +126,6 @@ def load_marketplace() -> MarketplaceRepo:
             "/Volumes/bootcamp_students/shipp_bronze/listing_images",
         ),
     )
-
 
 def render_startup_blocker(exc: Exception) -> None:
     """Render an actionable deployment blocker instead of a blank/error page."""
@@ -254,7 +243,6 @@ def render_startup_blocker(exc: Exception) -> None:
         "when Lakebase connectivity passes."
     )
 
-
 try:
     marketplace = load_marketplace()
 except Exception as exc:
@@ -275,11 +263,9 @@ except Exception as exc:
         "this deployment yet. Donor/requester marketplace flows remain available."
     )
 
-
 @st.cache_data(ttl=120, show_spinner=False)
 def load_listing_image(_marketplace: MarketplaceRepo, listing_id: str) -> bytes | None:
     return _marketplace.get_primary_listing_image(listing_id)
-
 
 @st.cache_data(ttl=120, max_entries=128, show_spinner=False)
 def load_listing_covers(
@@ -296,18 +282,15 @@ def load_listing_covers(
         for listing_id in listing_ids
     }
     print(f"[PERF] Cover batch ({len(listing_ids)} listings): "
-          f"{perf_counter() - start:.3f}s")
+        f"{perf_counter() - start:.3f}s")
     return covers
-
 
 @st.cache_data(ttl=120, show_spinner=False)
 def load_listing_images(_marketplace: MarketplaceRepo, listing_id: str) -> list[dict]:
     return _marketplace.get_listing_images(listing_id)
 
-
 def _select_listing_photo(state_key: str, index: int) -> None:
     st.session_state[state_key] = index
-
 
 @st.dialog("Item details & photos", width="large")
 def show_listing_photo(
@@ -405,7 +388,6 @@ for key, value in defaults.items():
     if key not in st.session_state:
         st.session_state[key] = value
 
-
 # ------------------------------------------------------------
 # Reusable UI helpers
 # ------------------------------------------------------------
@@ -419,6 +401,7 @@ def location_picker(
 ) -> tuple[float, float]:
     lat_key = f"{key}_lat"
     lon_key = f"{key}_lon"
+    confirmed_key = f"{key}_pin_confirmed"
 
     if lat_key not in st.session_state:
         st.session_state[lat_key] = default_lat
@@ -445,7 +428,7 @@ def location_picker(
 
     result = st_folium(
         map_obj,
-        key=f"{key}_map",
+        key=f"{key}_map_{st.session_state.get(f'{key}_map_version', 0)}",
         height=310,
         use_container_width=True,
         returned_objects=["last_clicked"],
@@ -455,6 +438,11 @@ def location_picker(
     if clicked:
         new_lat = float(clicked["lat"])
         new_lon = float(clicked["lng"])
+        if not (-90 <= new_lat <= 90 and -180 <= new_lon <= 180):
+            st.error("Invalid map coordinates.")
+            st.stop()
+
+        st.session_state[confirmed_key] = True
 
         if (
             abs(new_lat - lat) > 0.000001
@@ -470,11 +458,13 @@ def location_picker(
         f"{st.session_state[lon_key]:.6f}"
     )
 
+    if not st.session_state.get(confirmed_key, False):
+        st.info("Click the map to confirm your location before saving.")
+
     return (
         float(st.session_state[lat_key]),
         float(st.session_state[lon_key]),
     )
-
 
 def render_listing_gallery(
     listings: list[dict],
@@ -674,7 +664,6 @@ def render_deployment_evidence() -> None:
                     )
                 )
 
-
 def reset_request_session(request_id: str, requester_id: str) -> None:
     if (
         st.session_state.active_request_id != request_id
@@ -685,7 +674,6 @@ def reset_request_session(request_id: str, requester_id: str) -> None:
         st.session_state.messages = []
         st.session_state.pending_save = None
         st.session_state.tool_trace = []
-
 
 def run_agent_turn(
     *,
@@ -760,7 +748,6 @@ def run_agent_turn(
         )
         st.code(str(exc))
 
-
 def render_saved_items(user_id: str, request_id: str) -> None:
     try:
         saved_items = marketplace.list_saved_items(user_id, request_id)
@@ -768,7 +755,6 @@ def render_saved_items(user_id: str, request_id: str) -> None:
         st.caption("Saved items are temporarily unavailable.")
         st.code(str(exc))
         return
-
     if not saved_items:
         st.caption("No saved items for this request yet.")
         return
@@ -794,9 +780,6 @@ def render_saved_items(user_id: str, request_id: str) -> None:
 
     with st.expander("Technical saved-state evidence", expanded=False):
         st.dataframe(saved_items, width="stretch", hide_index=True)
-
-
-
 
 def initialize_session() -> None:
     """Initialize independent mutable state on every new Streamlit session."""

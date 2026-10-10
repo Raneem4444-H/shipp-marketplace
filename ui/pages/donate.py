@@ -25,9 +25,35 @@ def render_donor():
         "pickup location, and availability."
     )
 
+<<<<<<< Updated upstream
     # ---------------------------------------------------------
     # 1. CURRENT DONOR LISTINGS
     # ---------------------------------------------------------
+=======
+    # try:
+    #     donors = marketplace.list_users("DONOR")
+    # except Exception as exc:
+    #     st.error("Donor profiles are temporarily unavailable.")
+    #     st.code(str(exc))
+    #     st.stop()
+
+    # if not donors:
+    #     st.info("No donor demo profiles are available.")
+    #     st.stop()
+
+    # donor_by_label = {
+    #     display_user(row): row["user_id"]
+    #     for row in donors
+    # }
+
+    # donor_label = st.selectbox(
+    #     "Donor profile",
+    #     list(donor_by_label),
+    #     key="donor_profile",
+    # )
+    # donor_id = donor_by_label[donor_label]
+
+>>>>>>> Stashed changes
     st.markdown("#### Your live listings")
     st.caption(
         "These are the items you have already published. "

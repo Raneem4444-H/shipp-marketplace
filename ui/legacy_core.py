@@ -279,31 +279,83 @@ except Exception as exc:
 def load_listing_image(_marketplace: MarketplaceRepo, listing_id: str) -> bytes | None:
     return _marketplace.get_primary_listing_image(listing_id)
 
-# NEW: Clickable listing photo preview
-@st.dialog("Product Photo")
+
+@st.cache_data(ttl=120, show_spinner=False)
+def load_listing_images(_marketplace: MarketplaceRepo, listing_id: str) -> list[dict]:
+    return _marketplace.get_listing_images(listing_id)
+
+
+def _select_listing_photo(state_key: str, index: int) -> None:
+    st.session_state[state_key] = index
+
+
+@st.dialog("Item details & photos")
 def show_listing_photo(
     listing_id: str,
     title: str,
+    *,
+    description: str = "",
+    location: str = "",
+    category: str = "",
+    condition: str = "",
 ) -> None:
-
     st.subheader(title)
+    if location:
+        st.caption(f"{category} · {condition} · {location}")
 
-    with st.spinner("Loading product photo..."):
-        image_bytes = load_listing_image(
-            marketplace,
-            listing_id,
-        )
+    with st.spinner("Loading item photos..."):
+        photos = load_listing_images(marketplace, listing_id)
 
-    if image_bytes is not None:
-        st.image(
-            image_bytes,
-            use_container_width=True,
-        )
+    if not photos:
+        st.info("No photos are attached to this listing yet.")
     else:
-        st.warning(
-            "No photo is currently available for this item."
-        )
+        photo_key = f"shipp_photo_index_{listing_id}"
+        current = max(0, min(int(st.session_state.get(photo_key, 0)), len(photos) - 1))
+        st.session_state[photo_key] = current
+        image_bytes = photos[current]["content"]
 
+        st.caption(f"Photo {current + 1} of {len(photos)}")
+        if image_bytes:
+            st.image(image_bytes, use_container_width=True)
+        else:
+            st.warning("This photo is currently unavailable from image storage.")
+
+        previous, following = st.columns(2)
+        with previous:
+            st.button(
+                "← Previous photo", key=f"photo_prev_{listing_id}",
+                disabled=current == 0, on_click=_select_listing_photo,
+                args=(photo_key, current - 1), use_container_width=True,
+            )
+        with following:
+            st.button(
+                "Next photo →", key=f"photo_next_{listing_id}",
+                disabled=current == len(photos) - 1,
+                on_click=_select_listing_photo,
+                args=(photo_key, current + 1), use_container_width=True,
+            )
+
+        if len(photos) > 1:
+            thumbnails = st.columns(len(photos), gap="small")
+            for index, photo in enumerate(photos):
+                with thumbnails[index]:
+                    if photo["content"]:
+                        st.image(photo["content"], use_container_width=True)
+                    else:
+                        st.caption("Unavailable")
+                    st.button(
+                        f"{index + 1}", key=f"photo_thumb_{listing_id}_{index}",
+                        type="primary" if index == current else "secondary",
+                        on_click=_select_listing_photo,
+                        args=(photo_key, index), use_container_width=True,
+                        help=f"Select photo {index + 1}",
+                    )
+
+    if description:
+        st.markdown("**About this item**")
+        st.write(description)
+    with st.expander("Technical reference", expanded=False):
+        st.code(f"listing_id = {listing_id}")
 
 # ------------------------------------------------------------
 # Session state
@@ -410,82 +462,61 @@ def render_listing_gallery(
     empty_message: str,
     key_prefix: str,
 ) -> None:
-    """Render operational Lakebase listings with photo + description.
-
-    This gallery is for marketplace discovery and donor confirmation.
-    Request-specific recommendation eligibility still comes from Gold.
-    """
-
+    """Display live Lakebase listings; Gold still owns match eligibility."""
     if not listings:
         st.info(empty_message)
         return
 
-    columns = st.columns(3)
-
+    columns = st.columns(3, gap="large")
     for index, listing in enumerate(listings):
         listing_id = str(listing["listing_id"])
+        category = str(listing.get("category") or "Other").replace("_", " ").title()
+        condition = str(listing.get("condition") or "Condition unknown").replace("_", " ").title()
+        location = str(listing.get("location") or "Location unavailable").strip()
+        title = str(listing.get("title") or "Untitled item").strip()
+        description = str(listing.get("description") or "No description provided.").strip()
 
         with columns[index % 3]:
             with st.container(border=True):
                 image_bytes = load_listing_image(marketplace, listing_id)
-
                 if image_bytes:
                     st.image(image_bytes, use_container_width=True)
                 else:
                     st.markdown(
                         '<div class="listing-image-placeholder">'
-                        '<span>Photo processing</span>'
-                        '</div>',
+                        '<span>Photo unavailable</span></div>',
                         unsafe_allow_html=True,
                     )
-
-                category = str(listing.get("category") or "Other").replace("_", " ").title()
-                condition = str(
-                    listing.get("condition") or "Condition not specified"
-                ).replace("_", " ").title()
-                location = str(listing.get("location") or "Location not specified")
-                title = str(listing.get("title") or "Untitled item")
-                description = str(
-                    listing.get("description") or "No description provided."
-                ).strip()
 
                 st.markdown(
                     f"""
                     <div class="listing-card-copy">
                       <div class="product-card-top">
                         <span class="product-category">{html.escape(category)}</span>
-                        <span class="listing-live-badge">Live</span>
+                        <span class="listing-live-badge">Listed</span>
                       </div>
                       <h3 class="product-title">{html.escape(title)}</h3>
                       <div class="product-area">{html.escape(location)}</div>
                       <p class="listing-description">{html.escape(description)}</p>
                       <div class="product-meta">
                         <span>{html.escape(condition)}</span>
-                        <span>Available now</span>
+                        <span>Free item</span>
                       </div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
-
-                # NEW: Clickable product photo button
                 if st.button(
-                    "🔍 View photo",
+                    "View details & photos",
                     key=f"{key_prefix}_photo_{listing_id}",
+                    type="secondary",
                     use_container_width=True,
                 ):
                     show_listing_photo(
-                        listing_id=listing_id,
-                        title=title,
+                        listing_id=listing_id, title=title,
+                        description=description, location=location,
+                        category=category, condition=condition,
                     )
-
-                with st.expander("Listing details", expanded=False):
-                    st.caption(
-                        "Operational listing from Lakebase. Matching and ranking "
-                        "for a requester are produced separately by trusted Gold."
-                    )
-                    st.code(f"listing_id = {listing_id}")
-
 
 def render_deployment_evidence() -> None:
     """Render non-secret deployed-runtime proof without changing business state."""

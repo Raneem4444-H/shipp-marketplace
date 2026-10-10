@@ -1,35 +1,43 @@
-"""Auto-extracted from the original SHIPP app; review before deployment."""
+"""SHIPP marketplace home: operational listing discovery only."""
 from __future__ import annotations
-from ui.legacy_core import *  # noqa: F403,F401 — original dependencies
+
+from ui.legacy_core import *  # noqa: F403,F401
 from services.marketplace_service import MarketplaceService
+
 
 def render_home() -> None:
     catalog = MarketplaceService(marketplace)
     st.markdown(
         """
         <section class="shipp-hero">
-          <div class="shipp-eyebrow">AI-assisted household marketplace</div>
-          <h1>Give useful household items a second life.</h1>
-          <p>Explore real household items offered by donors. For request-specific
-          recommendations, use Find an item and SHIPP's trusted matching engine.</p>
+          <div class="shipp-eyebrow">SHIPP · Community marketplace</div>
+          <h1>Useful things deserve another home.</h1>
+          <p>Browse household items shared by donors. Explore what's listed,
+          or describe what you need to find relevant matches.</p>
         </section>
         """,
         unsafe_allow_html=True,
     )
-    st.markdown("## Recently available items")
-    st.caption("Live, non-expired donor listings from Lakebase. These are not personalized matches.")
+    explore_col, give_col, spacer = st.columns([1, 1, 2])
+    with explore_col:
+        if st.button("Explore items", key="home_explore", type="primary", use_container_width=True):
+            st.switch_page("ui/pages/marketplace.py")
+    with give_col:
+        if st.button("Give an item", key="home_donate", use_container_width=True):
+            st.switch_page("ui/pages/donate.py")
+
+    st.markdown("## Recently listed items")
+    st.caption("Current non-expired donor listings. Personalized matching is available under Find an item.")
     try:
         listings = catalog.list_available_listings(limit=6)
     except Exception:
-        st.error("The marketplace catalog is temporarily unavailable.")
+        st.error("The catalog is temporarily unavailable. Please try again.")
         return
     render_listing_gallery(
         listings,
-        empty_message="No available donor items yet. Check back after the next donation.",
+        empty_message="No items are listed right now. Check back later.",
         key_prefix="home",
     )
-    if st.button("Browse all available items", key="home_browse", type="primary"):
-        st.switch_page("ui/pages/marketplace.py")
-    st.caption("To donate, choose Give an item above. To find recommendations, choose Find an item.")
+
 
 render_home()

@@ -1,37 +1,22 @@
-"""Auto-extracted from the original SHIPP app; review before deployment."""
+"""SHIPP requester page — verified user, needs, matching, and AI saves."""
 from __future__ import annotations
-from ui.legacy_core import *  # noqa: F403,F401 — original dependencies
+from ui.legacy_core import *  # noqa: F403,F401
+from services.identity_service import require_role
+
 
 def render_requester():
+    profile = require_role("REQUESTER")
+    if profile is None:
+        st.stop()
+
+    requester_id = str(profile["user_id"])
+
     render_deployment_evidence()
     st.markdown("### Find an item")
     st.caption(
         "Choose an existing need or create a new one, then browse trusted "
         "matches and ask SHIPP to compare the strongest options."
     )
-
-    try:
-        requesters = marketplace.list_users("REQUESTER")
-    except Exception as exc:
-        st.error("Requester profiles are temporarily unavailable.")
-        st.code(str(exc))
-        st.stop()
-
-    if not requesters:
-        st.info("No requester demo profiles are available.")
-        st.stop()
-
-    requester_by_label = {
-        display_user(row): row["user_id"]
-        for row in requesters
-    }
-
-    requester_label = st.selectbox(
-        "Requester profile",
-        list(requester_by_label),
-        key="requester_profile",
-    )
-    requester_id = requester_by_label[requester_label]
 
     st.markdown("#### Marketplace")
     st.caption(

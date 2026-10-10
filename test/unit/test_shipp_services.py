@@ -7,7 +7,10 @@ from types import SimpleNamespace
 import pytest
 
 from services.dashboard_service import DashboardService
-from services.identity_service import verified_profile
+from services.identity_service import (
+    verified_profile,
+    verified_databricks_profile,
+)
 from services.marketplace_service import MarketplaceService
 from services.recommendation_service import RecommendationService
 
@@ -67,3 +70,86 @@ def test_recommendation_requires_requester_role():
         service.confirm_save({"user_id": "owner", "roles": ["DONOR"]}, "req", "item")
     out = service.confirm_save({"user_id": "owner", "roles": ["REQUESTER"]}, "req", "item")
     assert out == {"user_id": "owner", "request_id": "req", "listing_id": "item"}
+
+
+
+def test_databricks_dual_role_identity(monkeypatch):
+    monkeypatch.setenv(
+        "SHIPP_DATABRICKS_IDENTITY_MAP",
+        json.dumps({
+            "platform-user-123": {
+                "email": "me@example.com",
+                "user_id": "owner",
+            }
+        }),
+    )
+
+    headers = {
+        "x-forwarded-user": "platform-user-123",
+        "x-forwarded-email": "me@example.com",
+    }
+
+    # External deployments must reject Databricks headers.
+    monkeypatch.setenv(
+        "SHIPP_DEPLOYMENT_TARGET", "external_streamlit"
+    )
+    assert verified_databricks_profile(
+        FakeAuth(), headers
+    ) is None
+
+    # Test the configured Databricks App path.
+    monkeypatch.setenv(
+        "SHIPP_DEPLOYMENT_TARGET", "databricks_app"
+    )
+
+    profile = verified_databricks_profile(
+        FakeAuth(), headers
+    )
+
+    assert profile is not None
+    assert profile["user_id"] == "owner"
+    assert set(profile["roles"]) == {
+        "DONOR", "REQUESTER"
+    }
+
+    # Reject a missing platform user identifier.
+    assert verified_databricks_profile(
+        FakeAuth(),
+        {"x-forwarded-email": "me@example.com"},
+    ) is None
+
+    # Reject an unknown platform user.
+    assert verified_databricks_profile(
+        FakeAuth(),
+        {
+            "x-forwarded-user": "unknown-user",
+            "x-forwarded-email": "unknown@example.com",
+        },
+    ) is None
+
+    # Reject a different user attempting the same email.
+    assert verified_databricks_profile(
+        FakeAuth(),
+        {
+            "x-forwarded-user": "different-platform-user",
+            "x-forwarded-email": "me@example.com",
+        },
+    ) is None
+
+    # Reject an email mismatch.
+    assert verified_databricks_profile(
+        FakeAuth(),
+        {
+            "x-forwarded-user": "platform-user-123",
+            "x-forwarded-email": "different@example.com",
+        },
+    ) is None
+
+    # Reject a missing approved mapping.
+    monkeypatch.delenv(
+        "SHIPP_DATABRICKS_IDENTITY_MAP",
+        raising=False,
+    )
+    assert verified_databricks_profile(
+        FakeAuth(), headers
+    ) is None

@@ -6,7 +6,7 @@ from time import perf_counter
 from ui.legacy_core import *  # noqa: F403,F401
 from services.marketplace_service import MarketplaceService
 
-CATALOG_PAGE_SIZE = 9
+CATALOG_PAGE_SIZE = 6
 
 
 def render_explore() -> None:
@@ -14,15 +14,37 @@ def render_explore() -> None:
     st.markdown("## Explore available items")
     st.caption("Search household donations by name, description, category, or condition.")
 
-    search_col, category_col, condition_col = st.columns([2, 1, 1])
-    with search_col:
-        query = st.text_input(
-            "Search", key="catalog_query", placeholder="Search for a bed, table, books..."
+
+    with st.form("shipp_catalog_filters", border=False):
+        search_col, category_col, condition_col = st.columns(
+            [2, 1, 1]
         )
-    with category_col:
-        category = st.selectbox("Category", ["All categories", *CATEGORIES], key="catalog_category")
-    with condition_col:
-        condition = st.selectbox("Condition", ["All conditions", *CONDITIONS], key="catalog_condition")
+
+        with search_col:
+            query = st.text_input(
+                "Search",
+                key="catalog_query",
+                placeholder="Search for a bed, table, books...",
+            )
+
+        with category_col:
+            category = st.selectbox(
+                "Category",
+                ["All categories", *CATEGORIES],
+                key="catalog_category",
+            )
+
+        with condition_col:
+            condition = st.selectbox(
+                "Condition",
+                ["All conditions", *CONDITIONS],
+                key="catalog_condition",
+            )
+
+        st.form_submit_button(
+            "Apply filters",
+            type="primary",
+        )
 
     # A new filter combination always starts on page 1.
     signature = (query.strip(), category, condition)

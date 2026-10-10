@@ -309,7 +309,7 @@ def _select_listing_photo(state_key: str, index: int) -> None:
     st.session_state[state_key] = index
 
 
-@st.dialog("Item details & photos")
+@st.dialog("Item details & photos", width="large")
 def show_listing_photo(
     listing_id: str,
     title: str,

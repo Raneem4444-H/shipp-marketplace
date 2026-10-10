@@ -1,5 +1,6 @@
 """SHIPP donor page — publish and manage your own donations."""
-
+import os
+from ui.location_geocoding import reverse_geocode_pickup_area
 from __future__ import annotations
 
 from ui.legacy_core import *  # noqa: F403,F401
@@ -121,10 +122,10 @@ def render_donor():
             min_value=date.today(),
         )
 
-        location_name = st.text_input(
-            "Pickup area",
-            placeholder="Al Reem Island, Abu Dhabi",
-        )
+        # location_name = st.text_input(
+        #     "Pickup area",
+        #     placeholder="Al Reem Island, Abu Dhabi",
+        # )
 
     description = st.text_area(
         "Description",
@@ -146,6 +147,38 @@ def render_donor():
         default_lat=24.4976,
         default_lon=54.4075,
     )
+
+    location_name = ""
+
+    if st.session_state.get("donor_pin_confirmed", False):
+        ors_key = os.getenv("ORS_API_KEY", "")
+
+        if ors_key:
+            location_name = (
+                reverse_geocode_pickup_area(
+                    donor_lat,
+                    donor_lon,
+                    ors_key,
+                ) or ""
+            )
+        else:
+            st.warning("Pickup geocoding is not configured.")
+
+    st.text_input(
+        "Pickup area",
+        value=location_name,
+        disabled=True,
+        help="Automatically populated from your selected map pin.",
+    )
+
+    if (
+        st.session_state.get("donor_pin_confirmed", False)
+        and not location_name
+    ):
+        st.warning(
+            "Could not identify the pickup area. "
+            "Try selecting a nearby point."
+        )
 
     # ---------------------------------------------------------
     # 5. LISTING PREVIEW

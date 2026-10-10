@@ -5,7 +5,8 @@ requests>=2.31,<3
 databricks-sdk>=0.81,<1
 psycopg[binary]>=3.2,<4
 openai>=1.40,<3
-streamlit>=1.40,<2
+streamlit>=1.50,<2
+Pillow>=10,<13
 python-dotenv>=1.0,<2
 
 folium>=0.17,<1

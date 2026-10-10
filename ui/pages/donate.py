@@ -70,7 +70,7 @@ def render_donor():
                 st.image(
                     upload,
                     caption="Cover photo" if index == 0 else upload.name,
-                    use_container_width=True,
+                    width="stretch",
                 )
 
     st.markdown("#### 2. Item details")
@@ -123,7 +123,7 @@ def render_donor():
 
         with preview_left:
             if uploaded_files:
-                st.image(uploaded_files[0], use_container_width=True)
+                st.image(uploaded_files[0], width="stretch")
             else:
                 st.caption("Add a photo to complete the listing preview.")
 
@@ -141,7 +141,7 @@ def render_donor():
     if st.button(
         "Publish item",
         type="primary",
-        use_container_width=True,
+        width="stretch",
         key="publish_listing",
     ):
         if not uploaded_files:

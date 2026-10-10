@@ -29,6 +29,7 @@ if str(AGENT_SRC) not in sys.path:
     sys.path.insert(0, str(AGENT_SRC))
 
 from app_marketplace import MarketplaceRepo
+from ui.image_utils import make_card_thumbnail
 from app_runtime import (
     bootstrap_streamlit_secrets,
     deployment_target,
@@ -280,6 +281,25 @@ def load_listing_image(_marketplace: MarketplaceRepo, listing_id: str) -> bytes 
     return _marketplace.get_primary_listing_image(listing_id)
 
 
+@st.cache_data(ttl=120, max_entries=128, show_spinner=False)
+def load_listing_covers(
+    _marketplace: MarketplaceRepo, listing_ids: tuple[str, ...]
+) -> dict[str, bytes | None]:
+    """Batch cover lookups and cache compressed thumbnails for 120 seconds."""
+    from time import perf_counter
+
+    start = perf_counter()
+    original_images = _marketplace.get_primary_listing_images(listing_ids)
+    covers = {
+        listing_id: make_card_thumbnail(original_images[listing_id])
+        if original_images.get(listing_id) else None
+        for listing_id in listing_ids
+    }
+    print(f"[PERF] Cover batch ({len(listing_ids)} listings): "
+          f"{perf_counter() - start:.3f}s")
+    return covers
+
+
 @st.cache_data(ttl=120, show_spinner=False)
 def load_listing_images(_marketplace: MarketplaceRepo, listing_id: str) -> list[dict]:
     return _marketplace.get_listing_images(listing_id)
@@ -316,7 +336,7 @@ def show_listing_photo(
 
         st.caption(f"Photo {current + 1} of {len(photos)}")
         if image_bytes:
-            st.image(image_bytes, use_container_width=True)
+            st.image(image_bytes, width="stretch")
         else:
             st.warning("This photo is currently unavailable from image storage.")
 
@@ -325,14 +345,14 @@ def show_listing_photo(
             st.button(
                 "← Previous photo", key=f"photo_prev_{listing_id}",
                 disabled=current == 0, on_click=_select_listing_photo,
-                args=(photo_key, current - 1), use_container_width=True,
+                args=(photo_key, current - 1), width="stretch",
             )
         with following:
             st.button(
                 "Next photo →", key=f"photo_next_{listing_id}",
                 disabled=current == len(photos) - 1,
                 on_click=_select_listing_photo,
-                args=(photo_key, current + 1), use_container_width=True,
+                args=(photo_key, current + 1), width="stretch",
             )
 
         if len(photos) > 1:
@@ -340,14 +360,14 @@ def show_listing_photo(
             for index, photo in enumerate(photos):
                 with thumbnails[index]:
                     if photo["content"]:
-                        st.image(photo["content"], use_container_width=True)
+                        st.image(photo["content"], width="stretch")
                     else:
                         st.caption("Unavailable")
                     st.button(
                         f"{index + 1}", key=f"photo_thumb_{listing_id}_{index}",
                         type="primary" if index == current else "secondary",
                         on_click=_select_listing_photo,
-                        args=(photo_key, index), use_container_width=True,
+                        args=(photo_key, index), width="stretch",
                         help=f"Select photo {index + 1}",
                     )
 
@@ -467,7 +487,14 @@ def render_listing_gallery(
         st.info(empty_message)
         return
 
+    from time import perf_counter
+
     columns = st.columns(3, gap="large")
+    listing_ids = tuple(str(listing["listing_id"]) for listing in listings)
+    start = perf_counter()
+    covers = load_listing_covers(marketplace, listing_ids)
+    print(f"[PERF] Gallery covers: {perf_counter() - start:.3f}s")
+
     for index, listing in enumerate(listings):
         listing_id = str(listing["listing_id"])
         category = str(listing.get("category") or "Other").replace("_", " ").title()
@@ -478,9 +505,9 @@ def render_listing_gallery(
 
         with columns[index % 3]:
             with st.container(border=True):
-                image_bytes = load_listing_image(marketplace, listing_id)
+                image_bytes = covers.get(listing_id)
                 if image_bytes:
-                    st.image(image_bytes, use_container_width=True)
+                    st.image(image_bytes, width="stretch")
                 else:
                     st.markdown(
                         '<div class="listing-image-placeholder">'
@@ -510,7 +537,7 @@ def render_listing_gallery(
                     "View details & photos",
                     key=f"{key_prefix}_photo_{listing_id}",
                     type="secondary",
-                    use_container_width=True,
+                    width="stretch",
                 ):
                     show_listing_photo(
                         listing_id=listing_id, title=title,
@@ -596,7 +623,7 @@ def render_deployment_evidence() -> None:
             }
             for name, ok in evidence["privileges"].items()
         ]
-        st.dataframe(privilege_rows, use_container_width=True, hide_index=True)
+        st.dataframe(privilege_rows, width="stretch", hide_index=True)
 
         if st.session_state.last_created_listing_id:
             listing = marketplace.get_listing_record(
@@ -766,7 +793,7 @@ def render_saved_items(user_id: str, request_id: str) -> None:
         )
 
     with st.expander("Technical saved-state evidence", expanded=False):
-        st.dataframe(saved_items, use_container_width=True, hide_index=True)
+        st.dataframe(saved_items, width="stretch", hide_index=True)
 
 
 

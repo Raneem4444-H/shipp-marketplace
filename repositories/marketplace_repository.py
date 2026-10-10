@@ -241,7 +241,7 @@ class MarketplaceRepo:
         if self._workspace is None:
             return None
 
-        
+
         with self._connect() as conn, conn.cursor() as cur:
             cur.execute(
                 f"""
@@ -267,6 +267,48 @@ class MarketplaceRepo:
             return response.contents.read()
         except Exception:
             return None
+
+    def get_primary_listing_images(
+        self, listing_ids: Sequence[str]
+    ) -> dict[str, bytes | None]:
+        """Fetch visible listings' cover photos with one Lakebase metadata query.
+
+        Returns None for listings without photos or inaccessible Volume files.
+        The original images remain in the Volume for full-resolution dialogs.
+        """
+        ids = tuple(dict.fromkeys(str(item) for item in listing_ids))
+        if not ids:
+            return {}
+
+        images: dict[str, bytes | None] = dict.fromkeys(ids)
+        if self._workspace is None:
+            return images
+
+        placeholders = ", ".join("%s" for _ in ids)
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT DISTINCT ON (listing_id) listing_id, file_path
+                FROM {self._schema}.listing_files
+                WHERE listing_id IN ({placeholders})
+                  AND (file_type IS NULL OR file_type LIKE %s)
+                ORDER BY listing_id, uploaded_at ASC, listing_file_id ASC
+                """,
+                (*ids, "image/%"),
+            )
+            files = cur.fetchall()
+
+        for listing_id, path in files:
+            try:
+                response = self._workspace.files.download(path)
+                if response.contents is not None:
+                    with response.contents as contents:
+                        images[str(listing_id)] = contents.read()
+            except Exception:
+                # A missing Volume object must not block all product cards.
+                continue
+
+        return images
 
     def get_listing_images(
         self, listing_id: str, *, limit: int = 5

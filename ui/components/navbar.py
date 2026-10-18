@@ -18,7 +18,7 @@ def create_navigation():
         str(profile.get("name") or "Member").strip().split()[0][:20]
         if profile else ""
     )
-    account_label = f"Welcome, {name}" if profile else "Sign up / Log in"
+    account_label = f"Welcome, {name}" if profile else "Account"
 
     pages = [
         st.Page("ui/pages/home.py", title="Home", icon=":material/home:", default=True),

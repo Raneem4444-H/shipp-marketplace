@@ -13,6 +13,28 @@ ORS_REVERSE_URL = (
 )
 
 
+def approximate_area_label(latitude: float, longitude: float) -> str:
+    """Coarse, pin-derived area label used when name lookup is unavailable.
+
+    Two decimals is roughly 1 km, so the label never exposes an exact address.
+    It keeps the confirmed map pin as the only source of location, which means
+    a missing ORS key or an ORS outage no longer blocks publishing a listing or
+    creating a request.
+    """
+
+    if not (-90 <= latitude <= 90):
+        raise ValueError("Invalid latitude.")
+    if not (-180 <= longitude <= 180):
+        raise ValueError("Invalid longitude.")
+
+    lat_hemisphere = "N" if latitude >= 0 else "S"
+    lon_hemisphere = "E" if longitude >= 0 else "W"
+    return (
+        f"Near {abs(latitude):.2f}°{lat_hemisphere}, "
+        f"{abs(longitude):.2f}°{lon_hemisphere}"
+    )
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def reverse_geocode_pickup_area(
     latitude: float,

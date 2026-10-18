@@ -153,3 +153,53 @@ def test_databricks_dual_role_identity(monkeypatch):
     assert verified_databricks_profile(
         FakeAuth(), headers
     ) is None
+
+
+def _fake_streamlit(monkeypatch, headers):
+    import sys
+    from types import ModuleType
+
+    st = ModuleType("streamlit")
+    st.session_state = {}
+    st.context = SimpleNamespace(headers=headers)
+    monkeypatch.setitem(sys.modules, "streamlit", st)
+    return st
+
+
+def test_profile_cache_is_keyed_by_signed_in_identity(monkeypatch):
+    import services.identity_service as identity
+
+    monkeypatch.setenv("SHIPP_DEPLOYMENT_TARGET", "databricks_app")
+    headers = {"x-forwarded-user": "u-1", "x-forwarded-email": "one@example.com"}
+    st = _fake_streamlit(monkeypatch, headers)
+    lookups = []
+
+    def fake_resolve():
+        lookups.append(headers["x-forwarded-email"])
+        return {"user_id": headers["x-forwarded-user"], "roles": ["DONOR"]}
+
+    monkeypatch.setattr(identity, "_resolve_profile_uncached", fake_resolve)
+
+    first = identity.current_profile()
+    second = identity.current_profile()
+    assert first == second == {"user_id": "u-1", "roles": ["DONOR"]}
+    assert lookups == ["one@example.com"]  # second call served from session cache
+
+    # A different asserted identity in the same session must never reuse it.
+    headers.update({"x-forwarded-user": "u-2", "x-forwarded-email": "two@example.com"})
+    assert identity.current_profile()["user_id"] == "u-2"
+    assert lookups == ["one@example.com", "two@example.com"]
+
+    # Expired entries are resolved again so role changes take effect.
+    st.session_state[identity._PROFILE_CACHE_KEY]["at"] -= identity.PROFILE_CACHE_SECONDS + 1
+    identity.current_profile()
+    assert len(lookups) == 3
+
+
+def test_admin_profile_detection(monkeypatch):
+    from services.identity_service import is_admin_profile
+
+    monkeypatch.setenv("SHIPP_ADMIN_PROFILE_IDS", "admin-1, admin-2")
+    assert is_admin_profile({"user_id": "admin-2"})
+    assert not is_admin_profile({"user_id": "member"})
+    assert not is_admin_profile(None)

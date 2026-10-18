@@ -16,8 +16,8 @@ def render_dashboard() -> None:
     profile = current_profile()
     if profile is None:
         st.title("My Dashboard")
-        st.info("Complete your SHIPP account to see your donations and requests.")
-        st.page_link("ui/pages/auth.py", label="Open Signup / Account", icon=":material/person:")
+        st.info("Link your sign-in to an approved SHIPP account to see your donations and requests.")
+        st.page_link("ui/pages/auth.py", label="Open Account", icon=":material/person:")
         return
 
     first_name = str(profile.get("name") or "Member").strip().split()[0]

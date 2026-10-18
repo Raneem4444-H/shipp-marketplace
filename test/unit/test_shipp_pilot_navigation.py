@@ -42,7 +42,7 @@ def test_flat_top_navigation_and_dashboard_links(monkeypatch):
     assert nav["position"] == "top"
     assert isinstance(nav["items"], list)
     assert [page.title for page in nav["items"] if getattr(page, "visibility", "visible") != "hidden"] == [
-        "Home", "Explore", "Give an item", "Find an item", "My Dashboard", "Sign up / Log in",
+        "Home", "Explore", "Give an item", "Find an item", "My Dashboard", "Account",
     ]
     assert {page.path for page in nav["items"] if getattr(page, "visibility", "visible") == "hidden"} == {
         "ui/pages/donor_dashboard.py", "ui/pages/requester_dashboard.py",

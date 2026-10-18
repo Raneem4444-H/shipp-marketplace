@@ -112,3 +112,19 @@ def test_invalid_coordinates_are_rejected(monkeypatch):
         module.reverse_geocode_pickup_area(100, 54.4, "fake-key")
     with pytest.raises(ValueError, match="longitude"):
         module.reverse_geocode_pickup_area(24.5, 200, "fake-key")
+
+
+def test_approximate_area_never_blocks_and_stays_coarse(monkeypatch):
+    module = _load_geocoder(monkeypatch)
+    assert module.approximate_area_label(31.951234, 35.923456) == "Near 31.95°N, 35.92°E"
+    assert module.approximate_area_label(-33.8688, -151.2093) == "Near 33.87°S, 151.21°W"
+    with pytest.raises(ValueError, match="latitude"):
+        module.approximate_area_label(91, 0)
+
+
+def test_pages_fall_back_to_approximate_area_without_ors_key():
+    for page in ("ui/pages/ai_advisor.py", "ui/pages/donate.py"):
+        source = (ROOT / page).read_text(encoding="utf-8")
+        assert "approximate_area_label(" in source, page
+        assert "Location lookup is not configured" not in source, page
+        assert "Pickup geocoding is not configured" not in source, page

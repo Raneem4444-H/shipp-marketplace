@@ -12,6 +12,6 @@ st.title("SHIPP engineering")
 profile = current_profile()  # Active verified identity-to-profile binding required.
 allowlist = {x.strip() for x in os.getenv("SHIPP_ADMIN_PROFILE_IDS", "").split(",") if x.strip()}
 if profile is not None and profile["user_id"] in allowlist:
-    render_deployment_evidence()
+    render_deployment_evidence(force=True)
 else:
     st.info("Engineering diagnostics are restricted to authorized maintainers.")

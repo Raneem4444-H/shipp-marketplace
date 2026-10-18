@@ -6,7 +6,10 @@ import os
 
 from services.identity_service import require_role
 from ui.legacy_core import *
-from ui.location_geocoding import reverse_geocode_pickup_area
+from ui.location_geocoding import (
+    approximate_area_label,
+    reverse_geocode_pickup_area,
+)
 
 
 def render_requester():
@@ -23,24 +26,14 @@ def render_requester():
         "matches and ask SHIPP to compare the strongest options."
     )
 
-    st.markdown("#### Marketplace")
-    st.caption(
-        "Browse current donor listings with real photos and descriptions. "
-        "For your request, SHIPP will only recommend items that pass the "
-        "trusted Gold matching pipeline."
+    # The full catalog lives on Explore. Repeating 12 listing cards here pushed
+    # the actual task (choose or create a request) below the fold and cost an
+    # extra Lakebase query plus image batch on every rerun of this page.
+    st.page_link(
+        "ui/pages/marketplace.py",
+        label="Just browsing? See every listed item on Explore",
+        icon=":material/search:",
     )
-    try:
-        live_listings = marketplace.list_available_listings(limit=12)
-        render_listing_gallery(
-            live_listings,
-            empty_message="No donor listings are currently available.",
-            key_prefix="marketplace",
-        )
-    except Exception as exc:  # noqa: BLE001 - preserve UI fallback
-        st.warning("Marketplace listings are temporarily unavailable.")
-        st.code(str(exc))
-
-    st.markdown("---")
 
     request_mode = st.radio(
         "Your need",
@@ -100,8 +93,15 @@ def render_requester():
                         ors_key,
                     ) or ""
                 )
-            else:
-                st.warning("Location lookup is not configured.")
+            if not request_location:
+                # Area naming is a convenience; it must never block the write.
+                request_location = approximate_area_label(
+                    requester_lat, requester_lon,
+                )
+                st.caption(
+                    "Area name lookup is unavailable right now, so SHIPP will "
+                    "show an approximate area (about 1 km) for your pin."
+                )
 
         st.text_input(
             "Detected area",
@@ -160,7 +160,7 @@ def render_requester():
                     )
                 except Exception as exc:  # noqa: BLE001 - preserve UI fallback
                     st.error("The request could not be created.")
-                    st.code(str(exc))
+                    show_technical_detail(exc)
 
         if selected_request_id is None:
             selected_request_id = st.session_state.last_created_request_id
@@ -170,7 +170,7 @@ def render_requester():
             requests = marketplace.list_requests(requester_id)
         except Exception as exc:  # noqa: BLE001 - preserve UI fallback
             st.error("Your requests are temporarily unavailable.")
-            st.code(str(exc))
+            show_technical_detail(exc)
             st.stop()
 
         if not requests:
@@ -220,12 +220,11 @@ def render_requester():
         if agent is None:
             matches = []
             st.info(
-                "Trusted AI matching is not configured for this external "
-                "deployment yet. Marketplace browsing and request creation "
-                "remain available."
+                "SHIPP's AI matching isn't available right now. Your request "
+                "is saved, and you can keep browsing items on Explore."
             )
             if agent_startup_error:
-                st.caption(f"AI configuration: {agent_startup_error}")
+                show_technical_detail(f"AI configuration: {agent_startup_error}")
         else:
             try:
                 matches = agent.get_candidate_matches(
@@ -238,7 +237,7 @@ def render_requester():
                     "Trusted candidate matches are temporarily unavailable. "
                     "You can retry after the pipeline or warehouse is ready."
                 )
-                st.code(str(exc))
+                show_technical_detail(exc)
 
         browse_mode = st.radio(
             "Browse",
@@ -670,11 +669,10 @@ def render_requester():
                             "The save could not be completed. No unconfirmed "
                             "write was performed."
                         )
-                        st.code(str(exc))
+                        show_technical_detail(exc)
 
         if st.session_state.review_error:
-            st.error("Technical review error (admin diagnostics):")
-            st.code(st.session_state.review_error)
+            show_technical_detail(st.session_state.review_error)
 
         if st.session_state.tool_trace:
             tool_names = [

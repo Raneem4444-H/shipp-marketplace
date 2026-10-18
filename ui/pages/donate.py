@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import os
-from ui.location_geocoding import reverse_geocode_pickup_area
+from ui.location_geocoding import (
+    approximate_area_label,
+    reverse_geocode_pickup_area,
+)
 from ui.legacy_core import *  # noqa: F403,F401
 
 from services.identity_service import require_role
@@ -53,7 +56,7 @@ def render_donor():
 
     except Exception as exc:
         st.warning("Your live listings are temporarily unavailable.")
-        st.code(str(exc))
+        show_technical_detail(exc)
 
     st.markdown("---")
 
@@ -163,8 +166,13 @@ def render_donor():
                     ors_key,
                 ) or ""
             )
-        else:
-            st.warning("Pickup geocoding is not configured.")
+        if not location_name:
+            # Area naming is a convenience; it must never block publishing.
+            location_name = approximate_area_label(donor_lat, donor_lon)
+            st.caption(
+                "Area name lookup is unavailable right now, so SHIPP will "
+                "show an approximate pickup area (about 1 km) for your pin."
+            )
 
     st.text_input(
         "Pickup area",
@@ -172,15 +180,6 @@ def render_donor():
         disabled=True,
         help="Automatically populated from your selected map pin.",
     )
-
-    if (
-        st.session_state.get("donor_pin_confirmed", False)
-        and not location_name
-    ):
-        st.warning(
-            "Could not identify the pickup area. "
-            "Try selecting a nearby point."
-        )
 
     # ---------------------------------------------------------
     # 5. LISTING PREVIEW
@@ -306,7 +305,7 @@ def render_donor():
                         "Your item was saved as a draft, not published. "
                         "Photo storage or publication needs attention."
                     )
-                    st.code(str(exc))
+                    show_technical_detail(exc)
                     st.stop()
 
                 st.session_state["donor_pin_confirmed"] = False
@@ -356,6 +355,6 @@ def render_donor():
                     "The item could not be published. "
                     "No duplicate action was attempted."
                 )
-                st.code(str(exc))
+                show_technical_detail(exc)
 
 render_donor()

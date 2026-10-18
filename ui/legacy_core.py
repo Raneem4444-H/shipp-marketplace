@@ -258,10 +258,10 @@ try:
     agent = load_agent()
 except Exception as exc:
     agent_startup_error = str(exc)
-    st.warning(
-        "Marketplace is online, but SHIPP AI Advisor is not configured for "
-        "this deployment yet. Donor/requester marketplace flows remain available."
-    )
+    # This module body runs once per server process, so a st.warning here was
+    # shown only to whoever happened to load the app first, on whatever page.
+    # Find an item shows the advisor status where it matters; log the cause.
+    print(f"[SHIPP] AI Advisor startup failed: {agent_startup_error[:2000]}", file=sys.stderr)
 
 @st.cache_data(ttl=120, show_spinner=False)
 def load_listing_image(_marketplace: MarketplaceRepo, listing_id: str) -> bytes | None:
@@ -357,8 +357,9 @@ def show_listing_photo(
     if description:
         st.markdown("**About this item**")
         st.write(description)
-    with st.expander("Technical reference", expanded=False):
-        st.code(f"listing_id = {listing_id}")
+    if evidence_visible():
+        with st.expander("Technical reference", expanded=False):
+            st.code(f"listing_id = {listing_id}")
 
 # ------------------------------------------------------------
 # Session state
@@ -535,8 +536,37 @@ def render_listing_gallery(
                         category=category, condition=condition,
                     )
 
-def render_deployment_evidence() -> None:
+def evidence_visible() -> bool:
+    """Engineering diagnostics are for maintainers, not marketplace users.
+
+    Visible when SHIPP_SHOW_EVIDENCE=1 (e.g. during a graded demo) or when the
+    verified profile is listed in SHIPP_ADMIN_PROFILE_IDS.
+    """
+
+    if os.getenv("SHIPP_SHOW_EVIDENCE", "").strip().lower() in {"1", "true", "yes"}:
+        return True
+    try:
+        from services.identity_service import current_profile, is_admin_profile
+
+        return is_admin_profile(current_profile())
+    except Exception:
+        return False
+
+
+def show_technical_detail(detail: object) -> None:
+    """Log raw errors for the App logs; show them on screen to maintainers only."""
+
+    text = str(detail)
+    print(f"[SHIPP] technical detail: {text[:2000]}", file=sys.stderr)
+    if evidence_visible():
+        st.code(text[:2000])
+
+
+def render_deployment_evidence(*, force: bool = False) -> None:
     """Render non-secret deployed-runtime proof without changing business state."""
+
+    if not force and not evidence_visible():
+        return
 
     with st.expander("Deployment & permissions evidence", expanded=False):
         target_label = (
@@ -582,7 +612,7 @@ def render_deployment_evidence() -> None:
             evidence = marketplace.runtime_identity_permissions()
         except Exception as exc:
             st.error("FAIL — deployed App cannot validate its Lakebase runtime identity.")
-            st.code(str(exc))
+            show_technical_detail(exc)
             return
 
         status = "PASS" if evidence["all_required"] else "FAIL"
@@ -692,7 +722,7 @@ def run_agent_turn(
             }
         )
         if agent_startup_error:
-            st.caption(f"AI configuration: {agent_startup_error}")
+            show_technical_detail(f"AI configuration: {agent_startup_error}")
         return
 
     try:
@@ -746,14 +776,14 @@ def run_agent_turn(
                 ),
             }
         )
-        st.code(str(exc))
+        show_technical_detail(exc)
 
 def render_saved_items(user_id: str, request_id: str) -> None:
     try:
         saved_items = marketplace.list_saved_items(user_id, request_id)
     except Exception as exc:
         st.caption("Saved items are temporarily unavailable.")
-        st.code(str(exc))
+        show_technical_detail(exc)
         return
     if not saved_items:
         st.caption("No saved items for this request yet.")

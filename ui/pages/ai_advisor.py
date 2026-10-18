@@ -1,10 +1,13 @@
 """SHIPP requester page — verified user, needs, matching, and AI saves."""
 
-import os
-from ui.location_geocoding import reverse_geocode_pickup_area
 from __future__ import annotations
-from ui.legacy_core import *  # noqa: F403,F401
+
+import os
+
 from services.identity_service import require_role
+from ui.legacy_core import *
+from ui.location_geocoding import reverse_geocode_pickup_area
+
 
 def render_requester():
     profile = require_role("REQUESTER")
@@ -33,7 +36,7 @@ def render_requester():
             empty_message="No donor listings are currently available.",
             key_prefix="marketplace",
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - preserve UI fallback
         st.warning("Marketplace listings are temporarily unavailable.")
         st.code(str(exc))
 
@@ -67,11 +70,7 @@ def render_requester():
             )
 
         with request_right:
-            request_location = st.text_input(
-                "Your area",
-                placeholder="Al Maryah Island, Abu Dhabi",
-                key="request_location",
-            )
+            st.caption("Your area will be detected from your map pin.")
 
         request_text = st.text_area(
             "Describe what you need",
@@ -90,16 +89,41 @@ def render_requester():
             default_lon=54.3872,
         )
 
+        request_location = ""
+        if st.session_state.get("requester_pin_confirmed", False):
+            ors_key = os.getenv("ORS_API_KEY", "")
+            if ors_key:
+                request_location = (
+                    reverse_geocode_pickup_area(
+                        requester_lat,
+                        requester_lon,
+                        ors_key,
+                    ) or ""
+                )
+            else:
+                st.warning("Location lookup is not configured.")
+
+        st.text_input(
+            "Detected area",
+            value=request_location,
+            disabled=True,
+        )
+
         if st.button(
             "Create request",
             type="primary",
             width="stretch",
             key="create_request",
         ):
-            if not request_text.strip() or not request_location.strip():
-                st.warning("Description and location are required.")
+            if not request_text.strip():
+                st.warning("Please describe what you need.")
             elif not st.session_state.get("requester_pin_confirmed", False):
                 st.warning("Select your location on the map first.")
+            elif not request_location.strip():
+                st.warning(
+                    "Could not identify the area. "
+                    "Choose another nearby point."
+                )
             else:
                 try:
                     new_request_id = marketplace.create_request(
@@ -134,7 +158,7 @@ def render_requester():
                         "New requests become browsable after the existing SHIPP "
                         "incremental pipeline refreshes trusted Gold matches."
                     )
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 - preserve UI fallback
                     st.error("The request could not be created.")
                     st.code(str(exc))
 
@@ -144,7 +168,7 @@ def render_requester():
     else:
         try:
             requests = marketplace.list_requests(requester_id)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - preserve UI fallback
             st.error("Your requests are temporarily unavailable.")
             st.code(str(exc))
             st.stop()
@@ -190,9 +214,8 @@ def render_requester():
             st.markdown("### Matching items")
             st.caption(summary)
 
-        with header_right:
-            with st.expander("♡ Saved", expanded=False):
-                render_saved_items(user_id, request_id)
+        with header_right, st.expander("♡ Saved", expanded=False):
+            render_saved_items(user_id, request_id)
 
         if agent is None:
             matches = []
@@ -209,7 +232,7 @@ def render_requester():
                     user_id=user_id,
                     request_id=request_id,
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - preserve UI fallback
                 matches = []
                 st.warning(
                     "Trusted candidate matches are temporarily unavailable. "
@@ -474,7 +497,7 @@ def render_requester():
                                     }
                                 }
                             )
-                        except Exception as exc:
+                        except Exception as exc:  # noqa: BLE001 - preserve UI fallback
                             st.session_state.pending_save = None
                             st.session_state.tool_trace = []
                             st.session_state.messages.append(
@@ -642,7 +665,7 @@ def render_requester():
                                 "SHIPP rechecked the current listing state and "
                                     f"did not save the item: {result.message}"
                             )
-                    except Exception as exc:
+                    except Exception as exc:  # noqa: BLE001 - preserve UI fallback
                         st.error(
                             "The save could not be completed. No unconfirmed "
                             "write was performed."
